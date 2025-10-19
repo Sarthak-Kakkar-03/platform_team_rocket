@@ -77,12 +77,6 @@ const LinkItems = (courseID: number) => [
     feature_flag: "gradebook"
   },
   {
-    name: "Surveys",
-    icon: FiFileText,
-    student_only: true,
-    target: `/course/${courseID}/surveys`
-  },
-  {
     name: "Gradebook",
     icon: FiBookOpen,
     instructor_only: true,
@@ -90,10 +84,18 @@ const LinkItems = (courseID: number) => [
     feature_flag: "gradebook"
   },
   {
+    name: "Surveys",
+    icon: FiFileText,
+    student_only: true,
+    target: `/course/${courseID}/surveys`,
+    feature_flag: "surveys"
+  },
+  {
     name: "Manage Surveys",
     icon: FiFileText,
     instructors_or_graders_only: true,
-    target: `/course/${courseID}/surveys`
+    target: `/course/${courseID}/manage/surveys`,
+    feature_flag: "surveys"
   },
   {
     name: "Course Settings",
