@@ -52,7 +52,12 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
       `
       *,
       profiles!student_id (
-        name
+        name,
+        user_roles!user_roles_private_profile_id_fkey (
+          users!user_roles_user_id_fkey1 (
+            email
+          )
+        )
       )
     `
     )
