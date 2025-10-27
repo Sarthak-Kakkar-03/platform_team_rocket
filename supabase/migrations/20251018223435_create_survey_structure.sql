@@ -45,20 +45,21 @@ CREATE TABLE survey_templates (
 
 -- Create survey_responses table
 CREATE TABLE survey_responses (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    survey_id UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-    student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    answers JSONB NOT NULL DEFAULT '{}'::jsonb,
-    is_submitted BOOLEAN NOT NULL DEFAULT FALSE,
-    submitted_at TIMESTAMPTZ DEFAULT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    deleted_at TIMESTAMPTZ DEFAULT NULL
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  survey_id UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  response JSONB NOT NULL DEFAULT '{}'::jsonb,
+  submitted_at TIMESTAMPTZ DEFAULT NULL,
+  is_submitted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ DEFAULT NULL,
+  CONSTRAINT survey_responses_unique_per_profile UNIQUE (survey_id, profile_id)
 );
 
 -- Create unique constraint to prevent duplicate responses from same user
 CREATE UNIQUE INDEX idx_responses_survey_user
-  ON survey_responses(survey_id, student_id);
+  ON survey_responses(survey_id, profile_id);
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_survey_column()
@@ -99,7 +100,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER set_survey_submitted_at_trigger
-  BEFORE UPDATE ON survey_responses
+  BEFORE INSERT OR UPDATE ON survey_responses
   FOR EACH ROW
   EXECUTE FUNCTION set_survey_submitted_at();
 
@@ -118,8 +119,11 @@ CREATE INDEX idx_survey_responses_survey_id_active
   ON survey_responses (survey_id)
   WHERE deleted_at IS NULL;
 
-CREATE INDEX idx_survey_responses_student_id_active
-  ON survey_responses (student_id)
-  WHERE deleted_at IS NULL;
+--CREATE INDEX idx_survey_responses_student_id_active
+  --ON survey_responses (student_id)
+  --WHERE deleted_at IS NULL;
 
 -- TODO: ENABLE RLS
+-- ALTER TABLE surveys ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE survey_responses ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE survey_templates ENABLE ROW LEVEL SECURITY;
