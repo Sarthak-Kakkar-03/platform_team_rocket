@@ -22,9 +22,11 @@ async function getGroups(class_id: number, supabase: any, assignment_id: number)
   let groups;
   
   if (assignment_id == -1) {
-    const { data } = await supabase.from("assignment_groups").select("*").eq("class_id", class_id);
+    const { data: newest_assignment_id } = await supabase.from("assignments").select("id").eq("class_id", class_id).order("created_at", { ascending: false }).limit(1).single();
+    const { data } = await supabase.from("assignment_groups").select("*").eq("class_id", class_id).eq("assignment_id", newest_assignment_id);
     groups = data;
   }
+  
   else if (assignment_id > 0) {
     const { data } = await supabase.from("assignment_groups").select("*").eq("class_id", class_id).eq("assignment_id", assignment_id);
     groups = data;

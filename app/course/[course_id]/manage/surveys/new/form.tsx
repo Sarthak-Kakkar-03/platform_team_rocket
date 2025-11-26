@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Input, Textarea, Text, HStack, VStack, Button, Heading, Fieldset, Checkbox } from "@chakra-ui/react";
+import { Box, Input, Textarea, Text, HStack, VStack, Button, Heading, Fieldset, Checkbox, SelectRoot, SelectTrigger, SelectValueText, SelectContent, SelectItem, createListCollection } from "@chakra-ui/react";
 import { Controller, FieldValues } from "react-hook-form";
 import { Button as UIButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -36,8 +36,10 @@ type SurveyFormData = {
   status: "draft" | "published";
   due_date?: string;
   allow_response_editing: boolean;
+  survey_type: "assign_all" | "specific_students" | "peer_review";
   assigned_to_all: boolean;
   assigned_students?: string[];
+  assignment_id?: number; //for specific assignment peer review 
 };
 
 const sampleJsonTemplate = `{
@@ -111,6 +113,16 @@ export default function SurveyForm({
   const currentJson = watch("json");
   const currentStatus = watch("status");
   const assignedStudents = watch("assigned_students") || [];
+  const surveyType = watch("survey_type");
+
+  // Create collection for survey type dropdown
+  const surveyTypeCollection = createListCollection({
+    items: [
+      { value: "assign_all", label: "Assign to All Students" },
+      { value: "specific_students", label: "Assign to Specific Students" },
+      { value: "peer_review", label: "Peer Review" }
+    ]
+  });
 
   const validateJson = useCallback(() => {
     const jsonValue = getValues("json");
@@ -295,6 +307,45 @@ export default function SurveyForm({
         <form onSubmit={handleSubmit(onSubmitWrapper)}>
           <Fieldset.Root>
             <VStack align="stretch" gap={6}>
+              {/* Survey Type */}
+              <Fieldset.Content>
+                <Field label="Survey Type" required>
+                  <Controller
+                    name="survey_type"
+                    control={control}
+                    defaultValue="assign_all"
+                    rules={{ required: "Survey type is required" }}
+                    render={({ field }) => (
+                      <SelectRoot
+                        collection={surveyTypeCollection}
+                        value={[field.value]}
+                        onValueChange={(e) => {
+                          const newValue = e.value[0] as "assign_all" | "specific_students" | "peer_review";
+                          field.onChange(newValue);
+                        }}
+                      >
+                        <SelectTrigger
+                          bg={bgColor}
+                          borderColor={borderColor}
+                          color={textColor}
+                          _focus={{ borderColor: "blue.500" }}
+                        >
+                          <SelectValueText placeholder="Select survey type" />
+                        </SelectTrigger>
+                        <SelectContent bg={cardBgColor} borderColor={borderColor}>
+                          {surveyTypeCollection.items.map((item) => (
+                            <SelectItem key={item.value} item={item} color={textColor}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </SelectRoot>
+                    )}
+                  />
+                </Field>
+              </Fieldset.Content>
+
+
               {/* Survey Title */}
               <Fieldset.Content>
                 <Field
@@ -507,68 +558,31 @@ export default function SurveyForm({
                 />
               </Fieldset.Content>
 
-              {/* Assignment Mode */}
-              <Fieldset.Content>
-                <Field label="Assignment" required>
-                  <Controller
-                    name="assigned_to_all"
-                    control={control}
-                    defaultValue={true}
-                    render={({ field }) => (
-                      <VStack align="start" gap={3}>
-                        <HStack>
-                          <input
-                            type="radio"
-                            id="assign_all"
-                            checked={field.value === true}
-                            onChange={() => {
-                              field.onChange(true);
-                              // Keep assigned_students in form state so user can switch back
-                            }}
-                            style={{ accentColor: "#3182ce" }}
-                          />
-                          <label htmlFor="assign_all" style={{ color: textColor, cursor: "pointer" }}>
-                            Assign to all students in the course
-                          </label>
-                        </HStack>
-                        <HStack>
-                          <input
-                            type="radio"
-                            id="assign_specific"
-                            checked={field.value === false}
-                            onChange={() => field.onChange(false)}
-                            style={{ accentColor: "#3182ce" }}
-                          />
-                          <label htmlFor="assign_specific" style={{ color: textColor, cursor: "pointer" }}>
-                            Assign to specific students
-                          </label>
-                        </HStack>
-
-                        {field.value === false && (
-                          <Box w="100%" mt={2}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              bg="transparent"
-                              borderColor={buttonBorderColor}
-                              color={buttonTextColor}
-                              _hover={{ bg: "rgba(160, 174, 192, 0.1)" }}
-                              onClick={() => setIsStudentSelectorOpen(true)}
-                            >
-                              Select Students ({assignedStudents.length} selected)
-                            </Button>
-                            {assignedStudents.length > 0 && (
-                              <Text fontSize="sm" color={placeholderColor} mt={2}>
-                                {assignedStudents.length} student{assignedStudents.length !== 1 ? "s" : ""} selected
-                              </Text>
-                            )}
-                          </Box>
-                        )}
-                      </VStack>
-                    )}
-                  />
-                </Field>
-              </Fieldset.Content>
+              {/* Student Selection (only show for specific_students type) */}
+              {surveyType === "specific_students" && (
+                <Fieldset.Content>
+                  <Field label="Select Students" required>
+                    <Box w="100%">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        bg="transparent"
+                        borderColor={buttonBorderColor}
+                        color={buttonTextColor}
+                        _hover={{ bg: "rgba(160, 174, 192, 0.1)" }}
+                        onClick={() => setIsStudentSelectorOpen(true)}
+                      >
+                        Select Students ({assignedStudents.length} selected)
+                      </Button>
+                      {assignedStudents.length > 0 && (
+                        <Text fontSize="sm" color={placeholderColor} mt={2}>
+                          {assignedStudents.length} student{assignedStudents.length !== 1 ? "s" : ""} selected
+                        </Text>
+                      )}
+                    </Box>
+                  </Field>
+                </Fieldset.Content>
+              )}
 
               {/* Preview Section */}
               <VStack align="stretch" gap={2}>
