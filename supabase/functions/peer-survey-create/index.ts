@@ -85,7 +85,7 @@ async function handleRequest(req: Request) {
     title: title,
     description: description,
     due_date: due_date,
-    assigned_to_all: false,
+    survey_type: "peer_review",
   }).select("id").single();
   
   if (!survey) {

@@ -37,7 +37,6 @@ type SurveyFormData = {
   due_date?: string;
   allow_response_editing: boolean;
   survey_type: "assign_all" | "specific_students" | "peer_review";
-  assigned_to_all: boolean;
   assigned_students?: string[];
   assignment_id?: number; //for specific assignment peer review 
 };

@@ -23,7 +23,6 @@ type SurveyFormData = {
   due_date?: string;
   allow_response_editing: boolean;
   survey_type: "assign_all" | "specific_students" | "peer_review";
-  assigned_to_all: boolean;
   assigned_students?: string[];
 };
 
@@ -85,7 +84,6 @@ export default function NewSurveyPage() {
       due_date: "",
       allow_response_editing: false,
       survey_type: "assign_all",
-      assigned_to_all: true,
       assigned_students: [],
       assignment_id: -1
     }
@@ -177,10 +175,7 @@ export default function NewSurveyPage() {
             .single();
 
           if (data && !error) {
-            console.log("[loadLatestDraft] Raw data from DB:", data);
-            console.log("[loadLatestDraft] due_date:", data.due_date);
-            console.log("[loadLatestDraft] allow_response_editing:", data.allow_response_editing);
-            console.log("[loadLatestDraft] status:", data.status);
+
 
             // Convert due_date from ISO string to datetime-local format in course timezone
             let dueDateFormatted = "";
@@ -205,8 +200,8 @@ export default function NewSurveyPage() {
               json: data.json || "",
               status: data.status || "draft",
               due_date: dueDateFormatted,
-              allow_response_editing: Boolean(data.allow_response_editing),
-              assigned_to_all: data.assigned_to_all !== undefined ? data.assigned_to_all : true,
+              allow_response_editing: values.allow_response_editing,
+              survey_type: data.survey_type || "assign_all",
               assigned_students: assignedStudents
             };
 
@@ -302,10 +297,10 @@ export default function NewSurveyPage() {
           description: (values.description as string) || null,
           json: jsonToStore,
           status: finalStatus,
-          allow_response_editing: values.allow_response_editing?.checked ?? Boolean(values.allow_response_editing),
+          allow_response_editing: values.allow_response_editing,
           due_date: convertDueDateToISO(values.due_date as string),
           validation_errors: validationErrors,
-          assigned_to_all: values.survey_type === "assign_all",
+          survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review",
           updated_at: new Date().toISOString()
         };
 
@@ -342,11 +337,10 @@ export default function NewSurveyPage() {
             description: (values.description as string) || null,
             json: jsonToStore,
             status: finalStatus,
-            allow_response_editing: values.allow_response_editing?.checked ?? Boolean(values.allow_response_editing),
+            allow_response_editing: values.allow_response_editing,
             due_date: convertDueDateToISO(values.due_date as string),
             validation_errors: validationErrors,
-            assigned_to_all: values.survey_type === "assign_all",
-            updated_at: new Date().toISOString()
+            survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review",
           };
 
           const result = await supabase
@@ -361,21 +355,17 @@ export default function NewSurveyPage() {
           error = result.error;
         } else {
           // Should not happen if logic is correct, but treat as new
-          const survey_id = crypto.randomUUID();
           const insertPayload = {
-            survey_id,
-            version: 1,
             class_id: Number(course_id),
             created_by: private_profile_id,
             title: (values.title as string) || "Untitled Survey",
             description: (values.description as string) || null,
             json: jsonToStore,
             status: finalStatus,
-            created_at: new Date().toISOString(),
-            allow_response_editing: Boolean(values.allow_response_editing?.checked ?? values.allow_response_editing),
+            allow_response_editing: values.allow_response_editing,
             due_date: convertDueDateToISO(values.due_date as string),
             validation_errors: validationErrors,
-            assigned_to_all: values.survey_type === "assign_all"
+            survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
           };
 
           const result = await supabase
@@ -394,19 +384,16 @@ export default function NewSurveyPage() {
         const survey_id = crypto.randomUUID();
 
         const insertPayload = {
-          survey_id,
-          version: 1,
           class_id: Number(course_id),
           created_by: private_profile_id,
           title: (values.title as string) || "Untitled Survey",
           description: (values.description as string) || null,
           json: jsonToStore,
           status: finalStatus,
-          created_at: new Date().toISOString(),
-          allow_response_editing: Boolean(values.allow_response_editing?.checked ?? values.allow_response_editing),
+          allow_response_editing: values.allow_response_editing,
           due_date: convertDueDateToISO(values.due_date as string),
           validation_errors: validationErrors,
-          assigned_to_all: values.survey_type === "assign_all"
+          survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
         };
 
         console.log("[saveSurvey] creating new survey:", insertPayload);
@@ -463,7 +450,7 @@ export default function NewSurveyPage() {
         survey_id: data.survey_id,
         status: finalStatus,
         has_due_date: !!values.due_date,
-        allow_response_editing: Boolean(values.allow_response_editing?.checked ?? values.allow_response_editing),
+        allow_response_editing: values.allow_response_editing,
         has_validation_errors: !!validationErrors,
         is_update: isReturningFromPreview
       });

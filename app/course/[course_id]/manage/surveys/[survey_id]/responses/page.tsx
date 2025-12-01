@@ -17,7 +17,7 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
   // Fetch survey data to get title, status, version, JSON, due_date, and assignment mode (latest version)
   const { data: survey, error: surveyError } = await supabase
     .from("surveys")
-    .select("id, title, status, json, due_date, assigned_to_all")
+    .select("id, title, status, json, due_date, survey_type")
     .eq("survey_id", survey_id)
     .eq("class_id", Number(course_id))
     .limit(1)
@@ -90,7 +90,7 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
   // Calculate the correct total students based on assignment mode
   let assignedStudentCount = 0;
 
-  if (survey.assigned_to_all) {
+  if (survey.survey_type === "assign_all") {
     // Survey is assigned to all students - count all students in the course
     const { count } = await supabase
       .from("user_roles")
@@ -101,11 +101,12 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
 
     assignedStudentCount = count || 0;
   } else {
-    // Survey is assigned to specific students - count assignments
+    // Survey is assigned to specific students or peer review - count survey_responses (both assignments and submissions)
     const { count } = await supabase
-      .from("survey_assignments")
+      .from("survey_responses")
       .select("*", { count: "exact", head: true })
-      .eq("survey_id", survey.id);
+      .eq("survey_id", survey.id)
+      .is("deleted_at", null);
 
     assignedStudentCount = count || 0;
   }

@@ -21,7 +21,7 @@ type SurveyFormData = {
   status: "draft" | "published";
   due_date?: string;
   allow_response_editing: boolean;
-  assigned_to_all: boolean;
+  survey_type: "assign_all" | "specific_students" | "peer_review";
   assigned_students?: string[];
 };
 
@@ -79,7 +79,7 @@ export default function EditSurveyPage() {
       status: "draft",
       due_date: "",
       allow_response_editing: false,
-      assigned_to_all: true,
+      survey_type: "assign_all",
       assigned_students: []
     }
   });
@@ -162,7 +162,7 @@ export default function EditSurveyPage() {
           status: data.status || "draft",
           due_date: dueDateFormatted,
           allow_response_editing: Boolean(data.allow_response_editing),
-          assigned_to_all: data.assigned_to_all !== undefined ? data.assigned_to_all : true,
+          survey_type: data.survey_type || "assign_all",
           assigned_students: assignedStudents
         });
 
@@ -222,7 +222,7 @@ export default function EditSurveyPage() {
               allow_response_editing: values.allow_response_editing as boolean,
               due_date: convertDueDateToISO(values.due_date as string),
               validation_errors: null, // No validation errors for draft saves
-              assigned_to_all: Boolean(values.assigned_to_all)
+              survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
             })
             .eq("id", rawSurveyId)
             .select("id, survey_id")
@@ -233,10 +233,10 @@ export default function EditSurveyPage() {
             throw new Error(error?.message || "Failed to save draft");
           }
 
-          // Handle survey assignments for drafts
-          if (!values.assigned_to_all && values.assigned_students && values.assigned_students.length > 0) {
-            console.log("[saveDraftOnly] Updating survey assignments for:", values.assigned_students);
-            const { error: assignmentError } = await supabase.rpc("create_survey_assignments", {
+          // Handle survey response assignments for drafts
+          if (values.survey_type === "specific_students" && values.assigned_students && values.assigned_students.length > 0) {
+            console.log("[saveDraftOnly] Updating survey response assignments for:", values.assigned_students);
+            const { error: assignmentError } = await supabase.rpc("create_survey_response_assignments", {
               p_survey_id: data.id,
               p_profile_ids: values.assigned_students
             });
@@ -248,8 +248,12 @@ export default function EditSurveyPage() {
                 description: "Draft was saved but there was an error updating student assignments."
               });
             }
-          } else if (values.assigned_to_all) {
-            const { error: deleteError } = await supabase.from("survey_assignments").delete().eq("survey_id", data.id);
+          } else if (values.survey_type === "assign_all") {
+            const { error: deleteError } = await supabase
+              .from("survey_responses")
+              .delete()
+              .eq("survey_id", data.id)
+              .eq("is_submitted", false);
 
             if (deleteError) {
               console.error("[saveDraftOnly] Error removing assignments:", deleteError);
@@ -308,7 +312,7 @@ export default function EditSurveyPage() {
         }
 
         // Validate student assignments
-        if (!values.assigned_to_all && (!values.assigned_students || values.assigned_students.length === 0)) {
+        if (values.survey_type === "specific_students" && (!values.assigned_students || values.assigned_students.length === 0)) {
           toaster.create({
             title: "Cannot Save Survey",
             description: "Please select at least one student or change assignment mode to 'all students'.",
@@ -348,7 +352,7 @@ export default function EditSurveyPage() {
               allow_response_editing: values.allow_response_editing as boolean,
               due_date: convertDueDateToISO(values.due_date as string),
               validation_errors: validationErrors,
-              assigned_to_all: Boolean(values.assigned_to_all)
+              survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
             })
             .eq("id", rawSurveyId)
             .select("id, survey_id")
@@ -367,7 +371,7 @@ export default function EditSurveyPage() {
                   allow_response_editing: values.allow_response_editing as boolean,
                   due_date: convertDueDateToISO(values.due_date as string),
                   validation_errors: `Database error: ${error?.message || "Unknown error"}`,
-                  assigned_to_all: Boolean(values.assigned_to_all)
+                  survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
                 })
                 .eq("id", rawSurveyId)
                 .select("id, survey_id")
@@ -382,10 +386,10 @@ export default function EditSurveyPage() {
             return;
           }
 
-          // Handle survey assignments if not assigned to all students
-          if (!values.assigned_to_all && values.assigned_students && values.assigned_students.length > 0) {
-            console.log("[EditSurvey] Updating survey assignments for:", values.assigned_students);
-            const { error: assignmentError } = await supabase.rpc("create_survey_assignments", {
+          // Handle survey response assignments if assigned to specific students
+          if (values.survey_type === "specific_students" && values.assigned_students && values.assigned_students.length > 0) {
+            console.log("[EditSurvey] Updating survey response assignments for:", values.assigned_students);
+            const { error: assignmentError } = await supabase.rpc("create_survey_response_assignments", {
               p_survey_id: data.id,
               p_profile_ids: values.assigned_students
             });
@@ -397,9 +401,13 @@ export default function EditSurveyPage() {
                 description: "Survey was updated but there was an error assigning it to specific students."
               });
             }
-          } else if (values.assigned_to_all) {
-            // If assigned to all, remove any specific assignments
-            const { error: deleteError } = await supabase.from("survey_assignments").delete().eq("survey_id", data.id);
+          } else if (values.survey_type === "assign_all") {
+            // If assigned to all, remove any specific draft assignments
+            const { error: deleteError } = await supabase
+              .from("survey_responses")
+              .delete()
+              .eq("survey_id", data.id)
+              .eq("is_submitted", false);
 
             if (deleteError) {
               console.error("[EditSurvey] Error removing assignments:", deleteError);

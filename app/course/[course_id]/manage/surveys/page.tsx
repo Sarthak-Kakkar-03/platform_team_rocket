@@ -52,12 +52,13 @@ export default async function ManageSurveysPage({ params }: ManageSurveysPagePro
       // Calculate assigned student count based on assignment mode
       let assignedStudentCount = totalStudents || 0;
 
-      if (!survey.assigned_to_all) {
-        // Survey is assigned to specific students - count assignments
+      if (survey.survey_type === "specific_students") {
+        // Survey is assigned to specific students - count survey_responses (both assignments and submissions)
         const { count: assignmentCount } = await supabase
-          .from("survey_assignments")
+          .from("survey_responses")
           .select("*", { count: "exact", head: true })
-          .eq("survey_id", survey.id);
+          .eq("survey_id", survey.id)
+          .is("deleted_at", null);
 
         assignedStudentCount = assignmentCount || 0;
       }
