@@ -153,9 +153,9 @@ const TABLE_TO_CHANNEL_MAP: Partial<Record<TablesThatHaveAnIDField, ChannelType[
   help_request_students: ["help_request"],
   student_help_activity: ["help_request"],
 
-  // Live polls related tables - broadcast to staff and students
-  live_polls: ["staff", "students"],
-  live_poll_responses: ["staff", "students"]
+  // Live polls related tables
+  live_polls: ["staff", "students"], // Poll status broadcasts to all
+  live_poll_responses: ["staff"] // Response data only to staff (students don't see counts)
 };
 
 /**

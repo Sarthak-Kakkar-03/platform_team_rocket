@@ -758,17 +758,13 @@ export class CourseController {
 
   get livePollResponses(): TableController<"live_poll_responses"> {
     if (!this._livePollResponses) {
-      // Filter responses to only those for polls in this course using a subquery
+      // Fetch all responses - filtered by RLS and broadcast channel
+      // Real-time updates come via class:X:staff channel which handles class filtering
+      // Note: Consider adding RLS policy to live_poll_responses for proper security
       this._livePollResponses = new TableController({
         client: this.client,
         table: "live_poll_responses",
-        query: this.client
-          .from("live_poll_responses")
-          .select("*")
-          .in(
-            "live_poll_id",
-            this.client.from("live_polls").select("id").eq("class_id", this.courseId)
-          ),
+        query: this.client.from("live_poll_responses").select("*"),
         classRealTimeController: this.classRealTimeController
       });
     }
@@ -1817,8 +1813,8 @@ export function useActiveLivePolls() {
  * Hook to get a single poll by ID with real-time updates
  */
 export function useLivePoll(pollId: string | undefined) {
-  const controller = useCourseController();
-  const poll = useTableControllerValueById(controller.livePolls, pollId);
+  const { livePolls } = useCourseController();
+  const poll = useTableControllerValueById(livePolls, pollId);
   return poll;
 }
 

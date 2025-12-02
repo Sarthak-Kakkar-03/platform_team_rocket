@@ -1,10 +1,9 @@
 "use client";
 
-import { Box, Heading, Text, VStack, HStack, IconButton } from "@chakra-ui/react";
+import { Box, Heading, Text, VStack, HStack} from "@chakra-ui/react";
 import { useColorModeValue } from "@/components/ui/color-mode";
 import { useParams } from "next/navigation";
 import { useActiveLivePolls } from "@/hooks/useCourseController";
-import { LuRefreshCw } from "react-icons/lu";
 import StudentPollsTable from "./StudentPollsTable";
 
 export default function StudentPollsPage() {
@@ -15,8 +14,6 @@ export default function StudentPollsPage() {
   const textColor = useColorModeValue("#000000", "#FFFFFF");
   const borderColor = useColorModeValue("#D2D2D2", "#2D2D2D");
   const cardBgColor = useColorModeValue("#E5E5E5", "#1A1A1A");
-  const buttonTextColor = useColorModeValue("#4B5563", "#A0AEC0");
-  const buttonBorderColor = useColorModeValue("#6B7280", "#4A5568");
 
   const handlePollClick = () => {
     window.open(`/poll/${course_id}`, "_blank");
@@ -48,23 +45,25 @@ export default function StudentPollsPage() {
             <Text>Loading polls...</Text>
           </Box>
         ) : polls.length === 0 ? (
-          <Box
-            w="100%"
-            maxW="800px"
-            bg={cardBgColor}
-            border="1px solid"
-            borderColor={borderColor}
-            borderRadius="lg"
-            p={8}
-          >
-            <VStack align="center" gap={4}>
-              <Heading size="xl" color={textColor} textAlign="center">
-                No Live Polls Available
-              </Heading>
-              <Text color={textColor} textAlign="center">
-                There are currently no live polls available for this course.
-              </Text>
-            </VStack>
+          <Box display="flex" justifyContent="center" w="100%">
+            <Box
+              maxW="800px"
+              w="100%"
+              bg={cardBgColor}
+              border="1px solid"
+              borderColor={borderColor}
+              borderRadius="lg"
+              p={8}
+            >
+              <VStack align="center" gap={4}>
+                <Heading size="xl" color={textColor} textAlign="center">
+                  No Live Polls Available
+                </Heading>
+                <Text color={textColor} textAlign="center">
+                  There are currently no live polls available for this course.
+                </Text>
+              </VStack>
+            </Box>
           </Box>
         ) : (
           <StudentPollsTable polls={polls} onPollClick={handlePollClick} />

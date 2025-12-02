@@ -7,19 +7,14 @@ import { formatInTimeZone } from "date-fns-tz";
 import { MenuRoot, MenuTrigger, MenuContent, MenuItem } from "@/components/ui/menu";
 import { toaster } from "@/components/ui/toaster";
 import { createClient } from "@/utils/supabase/client";
-import { useCallback, useState, useMemo, useEffect } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { HiOutlineDotsHorizontal } from "react-icons/hi";
 import { FaTrash } from "react-icons/fa";
-import { useLivePolls, useCourseController, useCourse } from "@/hooks/useCourseController";
+import { useLivePolls, useCourse } from "@/hooks/useCourseController";
 import { Database } from "@/utils/supabase/SupabaseTypes";
 
 type LivePoll = Database["public"]["Tables"]["live_polls"]["Row"];
-type LivePollResponse = Database["public"]["Tables"]["live_poll_responses"]["Row"];
-
-type LivePollWithCounts = LivePoll & {
-  response_count: number;
-};
 
 type FilterType = "all" | "live" | "closed";
 
@@ -30,41 +25,9 @@ type PollsTableProps = {
 export default function PollsTable({ courseId }: PollsTableProps) {
   const router = useRouter();
   const { polls, isLoading: pollsLoading } = useLivePolls();
-  const courseController = useCourseController();
   const course = useCourse();
-  const timezone = course.time_zone || "America/New_York";
+  const timezone = course?.time_zone || "America/New_York";
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  const [responseCounts, setResponseCounts] = useState<Map<string, number>>(new Map());
-
-  // Subscribe to poll responses to get live counts
-  useEffect(() => {
-    const { data, unsubscribe } = courseController.livePollResponses.list((responses: LivePollResponse[]) => {
-      const counts = new Map<string, number>();
-      responses.forEach((response) => {
-        const current = counts.get(response.live_poll_id) || 0;
-        counts.set(response.live_poll_id, current + 1);
-      });
-      setResponseCounts(counts);
-    });
-
-    // Initial count
-    const counts = new Map<string, number>();
-    data.forEach((response: LivePollResponse) => {
-      const current = counts.get(response.live_poll_id) || 0;
-      counts.set(response.live_poll_id, current + 1);
-    });
-    setResponseCounts(counts);
-
-    return unsubscribe;
-  }, [courseController]);
-
-  // Combine polls with response counts
-  const pollsWithCounts: LivePollWithCounts[] = useMemo(() => {
-    return polls.map((poll) => ({
-      ...poll,
-      response_count: responseCounts.get(poll.id) || 0
-    }));
-  }, [polls, responseCounts]);
 
   const textColor = useColorModeValue("#1A202C", "#FFFFFF");
   const secondaryTextColor = useColorModeValue("#4B5563", "#A0AEC0");
@@ -80,14 +43,15 @@ export default function PollsTable({ courseId }: PollsTableProps) {
   const filterButtonHoverBg = useColorModeValue("#E5E5E5", "#4B5563");
 
   const filteredPolls = useMemo(() => {
+    if (!Array.isArray(polls)) return [];
     if (activeFilter === "all") {
-      return pollsWithCounts;
+      return polls;
     }
-    return pollsWithCounts.filter((poll) => (activeFilter === "live" ? poll.is_live : !poll.is_live));
-  }, [pollsWithCounts, activeFilter]);
+    return polls.filter((poll) => (activeFilter === "live" ? poll.is_live : !poll.is_live));
+  }, [polls, activeFilter]);
 
-  const getQuestionPrompt = (question: LivePollWithCounts) => {
-    const questionData = question.question as unknown as Record<string, unknown> | null;
+  const getQuestionPrompt = (poll: LivePoll) => {
+    const questionData = poll.question as unknown as Record<string, unknown> | null;
     return (questionData?.elements as unknown as { title: string }[])?.[0]?.title || "Poll";
   };
 
@@ -192,7 +156,7 @@ export default function PollsTable({ courseId }: PollsTableProps) {
     );
   }
 
-  if (polls.length === 0) {
+  if (!polls || polls.length === 0) {
     return null; // Parent component will show empty state
   }
 
@@ -228,9 +192,6 @@ export default function PollsTable({ courseId }: PollsTableProps) {
                 Status
               </Table.ColumnHeader>
               <Table.ColumnHeader color={tableHeaderTextColor} fontWeight="semibold">
-                Responses
-              </Table.ColumnHeader>
-              <Table.ColumnHeader color={tableHeaderTextColor} fontWeight="semibold">
                 Created
               </Table.ColumnHeader>
               <Table.ColumnHeader color={tableHeaderTextColor} fontWeight="semibold" textAlign="center">
@@ -249,11 +210,6 @@ export default function PollsTable({ courseId }: PollsTableProps) {
                   </Link>
                 </Table.Cell>
                 <Table.Cell>{getStatusBadge(poll.is_live)}</Table.Cell>
-                <Table.Cell>
-                  <Text fontSize="sm" color={textColor}>
-                    {poll.response_count}
-                  </Text>
-                </Table.Cell>
                 <Table.Cell>
                   <Text fontSize="xs" color={secondaryTextColor}>
                     {formatDate(poll.created_at)}
