@@ -2,19 +2,14 @@
 
 import { Box, Heading, Text, VStack, HStack, IconButton } from "@chakra-ui/react";
 import { useColorModeValue } from "@/components/ui/color-mode";
-import { createClient } from "@/utils/supabase/client";
 import { useParams } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
-import { toaster } from "@/components/ui/toaster";
-import { LivePoll } from "@/types/poll";
+import { useActiveLivePolls } from "@/hooks/useCourseController";
 import { LuRefreshCw } from "react-icons/lu";
 import StudentPollsTable from "./StudentPollsTable";
 
 export default function StudentPollsPage() {
   const { course_id } = useParams();
-  const [polls, setPolls] = useState<LivePoll[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { polls, isLoading } = useActiveLivePolls();
 
   // Color mode values
   const textColor = useColorModeValue("#000000", "#FFFFFF");
@@ -22,82 +17,6 @@ export default function StudentPollsPage() {
   const cardBgColor = useColorModeValue("#E5E5E5", "#1A1A1A");
   const buttonTextColor = useColorModeValue("#4B5563", "#A0AEC0");
   const buttonBorderColor = useColorModeValue("#6B7280", "#4A5568");
-
-  const fetchPolls = useCallback(async () => {
-    try {
-      const supabase = createClient();
-
-      // Get current user
-      const {
-        data: { user }
-      } = await supabase.auth.getUser();
-      if (!user) {
-        toaster.create({
-          title: "Authentication Required",
-          description: "Please log in to view polls.",
-          type: "error"
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Resolve this user's class-specific public_profile_id for this course
-      const { data: roleDataRaw, error: roleError } = await supabase
-        .from("user_roles")
-        .select("public_profile_id, role")
-        .eq("user_id", user.id)
-        .eq("class_id", Number(course_id))
-        .eq("role", "student")
-        .eq("disabled", false)
-        .single();
-
-      // Tell TypeScript what we actually expect from that query
-      const roleData = roleDataRaw as { public_profile_id: string; role: string } | null;
-
-      if (roleError || !roleData || !roleData.public_profile_id) {
-        toaster.create({
-          title: "Access Error",
-          description: "This page is only accessible to students enrolled in this course.",
-          type: "error"
-        });
-        setIsLoading(false);
-        return;
-      }
-
-      // Get live polls for this course
-      const { data: pollsData, error: pollsError } = await supabase
-        .from("live_polls")
-        .select("*")
-        .eq("class_id", Number(course_id))
-        .eq("is_live", true)
-        .order("created_at", { ascending: false });
-
-      if (pollsError) {
-        throw pollsError;
-      }
-
-      setPolls(pollsData || []);
-    } catch (error) {
-      console.error("Error loading polls:", error);
-      toaster.create({
-        title: "Error Loading Polls",
-        description: "An error occurred while loading polls.",
-        type: "error"
-      });
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [course_id]);
-
-  useEffect(() => {
-    fetchPolls();
-  }, [fetchPolls]);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    fetchPolls();
-  };
 
   const handlePollClick = () => {
     window.open(`/poll/${course_id}`, "_blank");
@@ -118,18 +37,7 @@ export default function StudentPollsPage() {
                   Participate in live polls for this course.
                 </Text>
               </VStack>
-              <IconButton
-                aria-label="Refresh polls"
-                onClick={handleRefresh}
-                loading={isRefreshing}
-                variant="outline"
-                bg="transparent"
-                borderColor={buttonBorderColor}
-                color={buttonTextColor}
-                _hover={{ bg: "rgba(160, 174, 192, 0.1)" }}
-              >
-                <LuRefreshCw />
-              </IconButton>
+              {/* Refresh button no longer needed - data updates in real-time */}
             </HStack>
           </VStack>
         )}

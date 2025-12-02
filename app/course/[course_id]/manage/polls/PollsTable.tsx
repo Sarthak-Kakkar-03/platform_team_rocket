@@ -1,30 +1,70 @@
 "use client";
 
-import { Box, Table, Text, Badge, HStack, IconButton, Button } from "@chakra-ui/react";
+import { Box, Table, Text, Badge, HStack, IconButton, Button, Spinner } from "@chakra-ui/react";
 import { useColorModeValue } from "@/components/ui/color-mode";
 import Link from "@/components/ui/link";
 import { formatInTimeZone } from "date-fns-tz";
 import { MenuRoot, MenuTrigger, MenuContent, MenuItem } from "@/components/ui/menu";
 import { toaster } from "@/components/ui/toaster";
 import { createClient } from "@/utils/supabase/client";
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { HiOutlineDotsHorizontal } from "react-icons/hi";
 import { FaTrash } from "react-icons/fa";
-import { LivePollWithCounts } from "./page";
+import { useLivePolls, useCourseController, useCourse } from "@/hooks/useCourseController";
+import { Database } from "@/utils/supabase/SupabaseTypes";
 
-type PollsTableProps = {
-  polls: LivePollWithCounts[];
-  courseId: string;
-  timezone: string;
+type LivePoll = Database["public"]["Tables"]["live_polls"]["Row"];
+type LivePollResponse = Database["public"]["Tables"]["live_poll_responses"]["Row"];
+
+type LivePollWithCounts = LivePoll & {
+  response_count: number;
 };
 
 type FilterType = "all" | "live" | "closed";
 
-export default function PollsTable({ polls, courseId, timezone }: PollsTableProps) {
+type PollsTableProps = {
+  courseId: string;
+};
+
+export default function PollsTable({ courseId }: PollsTableProps) {
   const router = useRouter();
-  const [pollRows, setPollRows] = useState<LivePollWithCounts[]>(polls);
+  const { polls, isLoading: pollsLoading } = useLivePolls();
+  const courseController = useCourseController();
+  const course = useCourse();
+  const timezone = course.time_zone || "America/New_York";
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [responseCounts, setResponseCounts] = useState<Map<string, number>>(new Map());
+
+  // Subscribe to poll responses to get live counts
+  useEffect(() => {
+    const { data, unsubscribe } = courseController.livePollResponses.list((responses: LivePollResponse[]) => {
+      const counts = new Map<string, number>();
+      responses.forEach((response) => {
+        const current = counts.get(response.live_poll_id) || 0;
+        counts.set(response.live_poll_id, current + 1);
+      });
+      setResponseCounts(counts);
+    });
+
+    // Initial count
+    const counts = new Map<string, number>();
+    data.forEach((response: LivePollResponse) => {
+      const current = counts.get(response.live_poll_id) || 0;
+      counts.set(response.live_poll_id, current + 1);
+    });
+    setResponseCounts(counts);
+
+    return unsubscribe;
+  }, [courseController]);
+
+  // Combine polls with response counts
+  const pollsWithCounts: LivePollWithCounts[] = useMemo(() => {
+    return polls.map((poll) => ({
+      ...poll,
+      response_count: responseCounts.get(poll.id) || 0
+    }));
+  }, [polls, responseCounts]);
 
   const textColor = useColorModeValue("#1A202C", "#FFFFFF");
   const secondaryTextColor = useColorModeValue("#4B5563", "#A0AEC0");
@@ -41,10 +81,10 @@ export default function PollsTable({ polls, courseId, timezone }: PollsTableProp
 
   const filteredPolls = useMemo(() => {
     if (activeFilter === "all") {
-      return pollRows;
+      return pollsWithCounts;
     }
-    return pollRows.filter((poll) => (activeFilter === "live" ? poll.is_live : !poll.is_live));
-  }, [pollRows, activeFilter]);
+    return pollsWithCounts.filter((poll) => (activeFilter === "live" ? poll.is_live : !poll.is_live));
+  }, [pollsWithCounts, activeFilter]);
 
   const getQuestionPrompt = (question: LivePollWithCounts) => {
     const questionData = question.question as unknown as Record<string, unknown> | null;
@@ -87,8 +127,6 @@ export default function PollsTable({ polls, courseId, timezone }: PollsTableProp
         throw new Error(error.message);
       }
 
-      setPollRows((prev) => prev.map((poll) => (poll.id === pollId ? { ...poll, is_live: nextState } : poll)));
-
       toaster.dismiss(loadingToast);
       toaster.create({
         title: nextState ? "Poll is Live" : "Poll Closed",
@@ -122,8 +160,6 @@ export default function PollsTable({ polls, courseId, timezone }: PollsTableProp
         throw new Error(error.message);
       }
 
-      setPollRows((prev) => prev.filter((poll) => poll.id !== pollId));
-
       toaster.dismiss(loadingToast);
       toaster.create({
         title: "Poll Deleted",
@@ -147,6 +183,18 @@ export default function PollsTable({ polls, courseId, timezone }: PollsTableProp
       return dateString;
     }
   };
+
+  if (pollsLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" p={8}>
+        <Spinner />
+      </Box>
+    );
+  }
+
+  if (polls.length === 0) {
+    return null; // Parent component will show empty state
+  }
 
   return (
     <>

@@ -151,7 +151,11 @@ const TABLE_TO_CHANNEL_MAP: Partial<Record<TablesThatHaveAnIDField, ChannelType[
   help_request_message_read_receipts: ["help_request"],
   help_request_messages: ["help_request"],
   help_request_students: ["help_request"],
-  student_help_activity: ["help_request"]
+  student_help_activity: ["help_request"],
+
+  // Live polls related tables - broadcast to staff and students
+  live_polls: ["staff", "students"],
+  live_poll_responses: ["staff", "students"]
 };
 
 /**
