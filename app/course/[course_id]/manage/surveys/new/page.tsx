@@ -24,10 +24,31 @@ type SurveyFormData = {
   allow_response_editing: boolean;
   survey_type: "assign_all" | "specific_students" | "peer_review";
   assigned_students?: string[];
+  assignment_id?: number;
 };
 
 type SurveyStatus = Tables<"surveys">["status"]; // "draft" | "published" | "closed"
 type SurveyIds = Pick<Tables<"surveys">, "id" | "survey_id">;
+
+// localStorage helpers for caching assigned students in drafts
+const getAssignedStudentsKey = (courseId: string, surveyId?: string) =>
+  surveyId ? `survey_assigned_students_${surveyId}` : `survey_assigned_students_new_${courseId}`;
+
+const getCachedAssignedStudents = (courseId: string, surveyId?: string): string[] | null => {
+  if (typeof window === "undefined") return null;
+  const cached = localStorage.getItem(getAssignedStudentsKey(courseId, surveyId));
+  return cached ? JSON.parse(cached) : null;
+};
+
+const setCachedAssignedStudents = (courseId: string, students: string[], surveyId?: string) => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(getAssignedStudentsKey(courseId, surveyId), JSON.stringify(students));
+};
+
+const clearCachedAssignedStudents = (courseId: string, surveyId?: string) => {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(getAssignedStudentsKey(courseId, surveyId));
+};
 
 export default function NewSurveyPage() {
   const { course_id } = useParams();
@@ -92,6 +113,19 @@ export default function NewSurveyPage() {
   const { setValue, reset } = form;
   const hasLoadedDraft = useRef(false);
   const hasLoadedTemplate = useRef(false);
+  const hasLoadedCachedStudents = useRef(false);
+
+  // Load cached assigned students from localStorage (for draft persistence)
+  useEffect(() => {
+    if (hasLoadedCachedStudents.current) return;
+    hasLoadedCachedStudents.current = true;
+
+    const cached = getCachedAssignedStudents(String(course_id));
+    if (cached && cached.length > 0) {
+      setValue("assigned_students", cached, { shouldDirty: false });
+      setValue("survey_type", "specific_students", { shouldDirty: false });
+    }
+  }, [course_id, setValue]);
 
   // Load template if template_id query parameter is present
   useEffect(() => {
@@ -175,8 +209,6 @@ export default function NewSurveyPage() {
             .single();
 
           if (data && !error) {
-
-
             // Convert due_date from ISO string to datetime-local format in course timezone
             let dueDateFormatted = "";
             if (data.due_date) {
@@ -184,11 +216,12 @@ export default function NewSurveyPage() {
               dueDateFormatted = formatInTimeZone(new Date(data.due_date), timezone, "yyyy-MM-dd'T'HH:mm");
             }
 
-            // Load existing survey assignments if any
+            // Load existing survey response assignments (students assigned to this survey)
             const { data: assignmentData } = await supabase
-              .from("survey_assignments")
+              .from("survey_responses")
               .select("profile_id")
-              .eq("survey_id", data.id);
+              .eq("survey_id", data.id)
+              .is("deleted_at", null);
 
             const assignedStudents = assignmentData?.map((a) => a.profile_id) || [];
             console.log("[loadLatestDraft] Loaded assignments:", assignedStudents);
@@ -200,7 +233,7 @@ export default function NewSurveyPage() {
               json: data.json || "",
               status: data.status || "draft",
               due_date: dueDateFormatted,
-              allow_response_editing: values.allow_response_editing,
+              allow_response_editing: data.allow_response_editing,
               survey_type: data.survey_type || "assign_all",
               assigned_students: assignedStudents
             };
@@ -340,7 +373,7 @@ export default function NewSurveyPage() {
             allow_response_editing: values.allow_response_editing,
             due_date: convertDueDateToISO(values.due_date as string),
             validation_errors: validationErrors,
-            survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review",
+            survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
           };
 
           const result = await supabase
@@ -381,8 +414,6 @@ export default function NewSurveyPage() {
         }
       } else {
         // Not returning from preview and no current ID - always create new survey
-        const survey_id = crypto.randomUUID();
-
         const insertPayload = {
           class_id: Number(course_id),
           created_by: private_profile_id,
@@ -419,28 +450,54 @@ export default function NewSurveyPage() {
         throw new Error(error?.message || "Failed to save survey");
       }
 
-      // Handle survey assignments if assigned to specific students
-      if (values.survey_type === "specific_students" && values.assigned_students && values.assigned_students.length > 0) {
-        console.log("[saveSurvey] creating survey assignments for:", values.assigned_students);
-        const { error: assignmentError } = await supabase.rpc("create_survey_assignments", {
-          p_survey_id: data.id,
-          p_profile_ids: values.assigned_students
-        });
-
-        if (assignmentError) {
-          console.error("[saveSurvey] assignment error:", assignmentError);
-          toaster.error({
-            title: "Warning",
-            description:
-              "Survey was created but there was an error assigning it to specific students. Please try editing the survey to reassign."
+      // Handle survey response creation based on survey_type (only when publishing)
+      if (finalStatus === "published") {
+        if (values.survey_type === "assign_all") {
+          // Create survey_responses for ALL students in the class
+          console.log("[saveSurvey] creating survey responses for all students");
+          const { error: assignmentError } = await supabase.rpc("create_survey_responses_for_all_students", {
+            p_survey_id: data.id
           });
-        }
-      } else if (values.survey_type === "assign_all") {
-        // If assigned to all, remove any specific assignments
-        const { error: deleteError } = await supabase.from("survey_assignments").delete().eq("survey_id", data.id);
 
-        if (deleteError) {
-          console.error("[saveSurvey] Error removing assignments:", deleteError);
+          if (assignmentError) {
+            console.error("[saveSurvey] assignment error:", assignmentError);
+            toaster.error({
+              title: "Warning",
+              description: "Survey was created but there was an error assigning it to students."
+            });
+          }
+        } else if (
+          values.survey_type === "specific_students" &&
+          values.assigned_students &&
+          values.assigned_students.length > 0
+        ) {
+          // Create survey_responses for specific students
+          console.log("[saveSurvey] creating survey response assignments for:", values.assigned_students);
+          const { error: assignmentError } = await supabase.rpc("create_survey_response_assignments", {
+            p_survey_id: data.id,
+            p_profile_ids: values.assigned_students
+          });
+
+          if (assignmentError) {
+            console.error("[saveSurvey] assignment error:", assignmentError);
+            toaster.error({
+              title: "Warning",
+              description: "Survey was created but there was an error assigning it to specific students."
+            });
+          }
+        }
+        // Clear localStorage cache after publishing
+        clearCachedAssignedStudents(String(course_id), data.id);
+      } else {
+        // Cache to localStorage for drafts (specific_students only)
+        if (
+          values.survey_type === "specific_students" &&
+          values.assigned_students &&
+          values.assigned_students.length > 0
+        ) {
+          setCachedAssignedStudents(String(course_id), values.assigned_students as string[], data.id);
+        } else {
+          clearCachedAssignedStudents(String(course_id), data.id);
         }
       }
 
@@ -539,8 +596,18 @@ export default function NewSurveyPage() {
             return;
           }
 
+          if (!values.assignment_id || values.assignment_id === -1) {
+            toaster.dismiss(loadingToast);
+            toaster.create({
+              title: "Assignment Required",
+              description: "Please select an assignment for the peer review survey.",
+              type: "error"
+            });
+            return;
+          }
+
           // Call peer-survey-create edge function
-          const { data, error } = await supabase.functions.invoke("peer-survey-create", {
+          const { error } = await supabase.functions.invoke("peer-survey-create", {
             body: {
               class_id: Number(course_id),
               assignment_id: values.assignment_id || -1,
@@ -567,7 +634,7 @@ export default function NewSurveyPage() {
             description: "Peer review assignments have been created successfully.",
             type: "success"
           });
-          
+
           // Redirect to surveys page
           router.push(`/course/${course_id}/manage/surveys`);
           return;
@@ -600,7 +667,10 @@ export default function NewSurveyPage() {
       }
 
       // Validate student assignments
-      if (values.survey_type === "specific_students" && (!values.assigned_students || values.assigned_students.length === 0)) {
+      if (
+        values.survey_type === "specific_students" &&
+        (!values.assigned_students || values.assigned_students.length === 0)
+      ) {
         toaster.create({
           title: "Cannot Save Survey",
           description: "Please select at least one student or change assignment mode.",

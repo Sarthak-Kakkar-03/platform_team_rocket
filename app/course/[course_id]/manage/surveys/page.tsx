@@ -30,44 +30,32 @@ export default async function ManageSurveysPage({ params }: ManageSurveysPagePro
     console.error("Error fetching surveys:", error);
   }
 
-  // Get total enrolled students in the course (used for surveys assigned to all)
-  const { count: totalStudents } = await supabase
-    .from("user_roles")
-    .select("*", { count: "exact", head: true })
-    .eq("class_id", Number(course_id))
-    .eq("role", "student")
-    .eq("disabled", false);
-
   // Fetch response counts and assigned student counts for each survey
+  // Both counts come from survey_responses table:
+  // - assigned_student_count: total entries in survey_responses (is_submitted true or false)
+  // - response_count: entries where is_submitted = true
   const surveysWithCounts = await Promise.all(
     (surveys || []).map(async (survey: Survey) => {
-      // Get response count
-      const { count: responseCount } = await supabase
+      // Get total assigned (all survey_responses entries)
+      const { count: assignedCount } = await supabase
+        .from("survey_responses")
+        .select("*", { count: "exact", head: true })
+        .eq("survey_id", survey.id)
+        .is("deleted_at", null);
+
+      // Get submitted count (is_submitted = true)
+      const { count: submittedCount } = await supabase
         .from("survey_responses")
         .select("*", { count: "exact", head: true })
         .eq("survey_id", survey.id)
         .eq("is_submitted", true)
         .is("deleted_at", null);
 
-      // Calculate assigned student count based on assignment mode
-      let assignedStudentCount = totalStudents || 0;
-
-      if (survey.survey_type === "specific_students") {
-        // Survey is assigned to specific students - count survey_responses (both assignments and submissions)
-        const { count: assignmentCount } = await supabase
-          .from("survey_responses")
-          .select("*", { count: "exact", head: true })
-          .eq("survey_id", survey.id)
-          .is("deleted_at", null);
-
-        assignedStudentCount = assignmentCount || 0;
-      }
-
       return {
         ...survey,
-        response_count: responseCount || 0,
-        submitted_count: responseCount || 0,
-        assigned_student_count: assignedStudentCount
+        response_count: submittedCount || 0,
+        submitted_count: submittedCount || 0,
+        assigned_student_count: assignedCount || 0
       };
     })
   );

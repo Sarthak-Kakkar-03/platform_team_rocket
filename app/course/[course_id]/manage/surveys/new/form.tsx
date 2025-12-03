@@ -1,12 +1,29 @@
 "use client";
 
-import { Box, Input, Textarea, Text, HStack, VStack, Button, Heading, Fieldset, Checkbox, SelectRoot, SelectTrigger, SelectValueText, SelectContent, SelectItem, createListCollection } from "@chakra-ui/react";
+import {
+  Box,
+  Input,
+  Textarea,
+  Text,
+  HStack,
+  VStack,
+  Button,
+  Heading,
+  Fieldset,
+  Checkbox,
+  SelectRoot,
+  SelectTrigger,
+  SelectValueText,
+  SelectContent,
+  SelectItem,
+  createListCollection
+} from "@chakra-ui/react";
 import { Controller, FieldValues } from "react-hook-form";
 import { Button as UIButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { toaster } from "@/components/ui/toaster";
 import { UseFormReturnType } from "@refinedev/react-hook-form";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useColorModeValue } from "@/components/ui/color-mode";
 import { SurveyPreviewModal } from "@/components/survey-preview-modal";
@@ -27,6 +44,11 @@ import SurveyBuilderModal from "@/components/survey/SurveyBuilderModal";
 import { createClient } from "@/utils/supabase/client";
 import type { Database } from "@/utils/supabase/SupabaseTypes";
 
+type Assignment = {
+  id: number;
+  title: string;
+};
+
 type SurveyTemplateInsert = Database["public"]["Tables"]["survey_templates"]["Insert"];
 
 type SurveyFormData = {
@@ -38,7 +60,7 @@ type SurveyFormData = {
   allow_response_editing: boolean;
   survey_type: "assign_all" | "specific_students" | "peer_review";
   assigned_students?: string[];
-  assignment_id?: number; //for specific assignment peer review 
+  assignment_id?: number; //for specific assignment peer review
 };
 
 const sampleJsonTemplate = `{
@@ -108,6 +130,9 @@ export default function SurveyForm({
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   // Student selector modal state
   const [isStudentSelectorOpen, setIsStudentSelectorOpen] = useState(false);
+  // Assignments for peer review dropdown
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
 
   const currentJson = watch("json");
   const currentStatus = watch("status");
@@ -121,6 +146,49 @@ export default function SurveyForm({
       { value: "specific_students", label: "Assign to Specific Students" },
       { value: "peer_review", label: "Peer Review" }
     ]
+  });
+
+  // Fetch assignments for the current class
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (!course_id) return;
+
+      setIsLoadingAssignments(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("assignments")
+          .select("id, title")
+          .eq("class_id", Number(course_id))
+          .is("archived_at", null)
+          .order("due_date", { ascending: false });
+
+        if (error) {
+          console.error("Error fetching assignments:", error);
+          toaster.create({
+            title: "Error Loading Assignments",
+            description: "Failed to load assignments. Please try again.",
+            type: "error"
+          });
+        } else {
+          setAssignments(data || []);
+        }
+      } catch (err) {
+        console.error("Error fetching assignments:", err);
+      } finally {
+        setIsLoadingAssignments(false);
+      }
+    };
+
+    fetchAssignments();
+  }, [course_id]);
+
+  // Create collection for assignments dropdown
+  const assignmentsCollection = createListCollection({
+    items: assignments.map((assignment) => ({
+      value: String(assignment.id),
+      label: assignment.title
+    }))
   });
 
   const validateJson = useCallback(() => {
@@ -343,7 +411,6 @@ export default function SurveyForm({
                   />
                 </Field>
               </Fieldset.Content>
-
 
               {/* Survey Title */}
               <Fieldset.Content>
@@ -579,6 +646,61 @@ export default function SurveyForm({
                         </Text>
                       )}
                     </Box>
+                  </Field>
+                </Fieldset.Content>
+              )}
+
+              {/* Assignment Selection (only show for peer_review type) */}
+              {surveyType === "peer_review" && (
+                <Fieldset.Content>
+                  <Field label="Select Assignment" required>
+                    <Controller
+                      name="assignment_id"
+                      control={control}
+                      rules={{ required: "Assignment is required for peer review surveys" }}
+                      render={({ field }) => (
+                        <SelectRoot
+                          collection={assignmentsCollection}
+                          value={field.value ? [String(field.value)] : []}
+                          onValueChange={(e) => {
+                            const newValue = e.value[0] ? Number(e.value[0]) : undefined;
+                            field.onChange(newValue);
+                          }}
+                          disabled={isLoadingAssignments}
+                        >
+                          <SelectTrigger
+                            bg={bgColor}
+                            borderColor={borderColor}
+                            color={textColor}
+                            _focus={{ borderColor: "blue.500" }}
+                          >
+                            <SelectValueText
+                              placeholder={isLoadingAssignments ? "Loading assignments..." : "Select an assignment"}
+                            />
+                          </SelectTrigger>
+                          <SelectContent bg={cardBgColor} borderColor={borderColor}>
+                            {assignmentsCollection.items.length === 0 ? (
+                              <Box p={2} textAlign="center">
+                                <Text fontSize="sm" color={placeholderColor}>
+                                  {isLoadingAssignments ? "Loading assignments..." : "No assignments available"}
+                                </Text>
+                              </Box>
+                            ) : (
+                              assignmentsCollection.items.map((item) => (
+                                <SelectItem key={item.value} item={item} color={textColor}>
+                                  {item.label}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </SelectRoot>
+                      )}
+                    />
+                    {errors.assignment_id && (
+                      <Text fontSize="sm" color="red.500" mt={1}>
+                        {errors.assignment_id.message?.toString()}
+                      </Text>
+                    )}
                   </Field>
                 </Fieldset.Content>
               )}

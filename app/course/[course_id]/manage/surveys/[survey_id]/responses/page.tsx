@@ -87,29 +87,27 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
     );
   }
 
-  // Calculate the correct total students based on assignment mode
-  let assignedStudentCount = 0;
+  // Calculate totals from survey_responses table
+  // Total assigned = all survey_responses entries (is_submitted true or false)
+  // Submitted count = survey_responses where is_submitted = true
+  const { count: totalAssigned } = await supabase
+    .from("survey_responses")
+    .select("*", { count: "exact", head: true })
+    .eq("survey_id", survey.id)
+    .is("deleted_at", null);
 
-  if (survey.survey_type === "assign_all") {
-    // Survey is assigned to all students - count all students in the course
-    const { count } = await supabase
-      .from("user_roles")
-      .select("*", { count: "exact", head: true })
-      .eq("class_id", Number(course_id))
-      .eq("role", "student")
-      .eq("disabled", false);
+  const { count: submittedCount } = await supabase
+    .from("survey_responses")
+    .select("*", { count: "exact", head: true })
+    .eq("survey_id", survey.id)
+    .eq("is_submitted", true)
+    .is("deleted_at", null);
 
-    assignedStudentCount = count || 0;
-  } else {
-    // Survey is assigned to specific students or peer review - count survey_responses (both assignments and submissions)
-    const { count } = await supabase
-      .from("survey_responses")
-      .select("*", { count: "exact", head: true })
-      .eq("survey_id", survey.id)
-      .is("deleted_at", null);
+  const assignedStudentCount = totalAssigned || 0;
+  const respondedCount = submittedCount || 0;
 
-    assignedStudentCount = count || 0;
-  }
+  // Filter to only show submitted responses in the view
+  const submittedResponses = (responses || []).filter((r) => r.is_submitted);
 
   // Pass data to the client component
   return (
@@ -121,8 +119,9 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
       surveyStatus={survey.status}
       surveyJson={survey.json}
       surveyDueDate={survey.due_date}
-      responses={responses || []}
+      responses={submittedResponses}
       totalStudents={assignedStudentCount}
+      respondedCount={respondedCount}
       timezone={timezone}
     />
   );
