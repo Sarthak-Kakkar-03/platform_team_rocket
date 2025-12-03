@@ -556,7 +556,7 @@ export default function NewSurveyPage() {
           }
 
           // Call peer-survey-create edge function
-          const { error } = await supabase.functions.invoke("peer-survey-create", {
+          const { data: responseData, error } = await supabase.functions.invoke("peer-survey-create", {
             body: {
               class_id: Number(course_id),
               assignment_id: values.assignment_id || -1,
@@ -574,6 +574,15 @@ export default function NewSurveyPage() {
             toaster.error({
               title: "Error Creating Peer Review",
               description: error.message || "Failed to create peer review survey"
+            });
+            return;
+          }
+
+          if (!responseData || !responseData.success) {
+            console.error("[onSubmit] peer-survey-create failed:", responseData);
+            toaster.error({
+              title: "Error Creating Peer Review",
+              description: "Failed to create peer review survey. Please try again."
             });
             return;
           }
