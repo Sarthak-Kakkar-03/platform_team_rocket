@@ -12,6 +12,7 @@ import { toaster } from "@/components/ui/toaster";
 import { useTrackEvent } from "@/hooks/useTrackEvent";
 import { createClient } from "@/utils/supabase/client";
 import { useCallback, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useIsInstructor } from "@/hooks/useClassProfiles";
 import SurveyFilterButtons from "@/components/survey/SurveyFilterButtons";
 import type { Survey, SurveyWithCounts } from "@/types/survey";
@@ -26,6 +27,7 @@ type SurveysTableProps = {
 
 export default function SurveysTable({ surveys, courseId, timezone }: SurveysTableProps) {
   const trackEvent = useTrackEvent();
+  const router = useRouter();
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const isInstructor = useIsInstructor();
 
@@ -118,103 +120,11 @@ export default function SurveysTable({ surveys, courseId, timezone }: SurveysTab
   };
 
   const handlePublish = useCallback(
-    async (survey: Survey) => {
-      // Validate due date
-      if (survey.due_date) {
-        const dueDate = new Date(survey.due_date);
-        const now = new Date();
-
-        if (dueDate < now) {
-          toaster.create({
-            title: "Cannot Publish Survey",
-            description:
-              "The due date is in the past. Please edit the survey and update the due date before publishing.",
-            type: "error"
-          });
-          return;
-        }
-      }
-
-      // Show loading toast
-      const loadingToast = toaster.create({
-        title: "Publishing Survey",
-        description: "Updating survey status...",
-        type: "loading"
-      });
-
-      try {
-        const supabase = createClient();
-
-        // Validate JSON before publishing
-        // survey.json is already a parsed object from Supabase (JSONB columns are auto-deserialized)
-        let validationErrors = null;
-        try {
-          if (survey.json) {
-            // If it's already an object, validate by stringifying and parsing
-            // If it's a string, parse it
-            if (typeof survey.json === "string") {
-              JSON.parse(survey.json);
-            } else {
-              // Already an object, validate by ensuring it can be stringified
-              JSON.stringify(survey.json);
-            }
-          }
-        } catch (error) {
-          validationErrors = `Invalid JSON configuration: ${error instanceof Error ? error.message : "Unknown error"}`;
-        }
-
-        // Update survey status to published
-        const { data, error } = await supabase
-          .from("surveys")
-          .update({
-            status: validationErrors ? "draft" : "published",
-            validation_errors: validationErrors
-          })
-          .eq("id", survey.id)
-          .select("id, survey_id, status")
-          .single();
-
-        if (error || !data) {
-          throw new Error(error?.message || "Failed to publish survey");
-        }
-
-        // Dismiss loading toast and show success
-        toaster.dismiss(loadingToast);
-
-        if (validationErrors) {
-          toaster.create({
-            title: "Survey Remains Draft",
-            description: "Survey could not be published due to validation issues. Please fix the JSON configuration.",
-            type: "warning"
-          });
-        } else {
-          toaster.create({
-            title: "Survey Published",
-            description: "Your survey has been published and is now available to students.",
-            type: "success"
-          });
-        }
-
-        // Track the publish event
-        trackEvent("survey_published", {
-          course_id: Number(courseId),
-          survey_id: survey.survey_id,
-          has_validation_errors: !!validationErrors
-        });
-
-        // Refresh the page to show updated status
-        window.location.reload();
-      } catch (error) {
-        // Dismiss loading toast and show error
-        toaster.dismiss(loadingToast);
-        toaster.create({
-          title: "Failed to Publish Survey",
-          description: error instanceof Error ? error.message : "An unexpected error occurred",
-          type: "error"
-        });
-      }
+    (survey: Survey) => {
+      // Redirect to edit page - single point of entry for publishing surveys
+      router.push(`/course/${courseId}/manage/surveys/${survey.id}/edit`);
     },
-    [courseId, trackEvent]
+    [courseId, router]
   );
 
   const handleClose = useCallback(
@@ -507,11 +417,8 @@ export default function SurveysTable({ surveys, courseId, timezone }: SurveysTab
                     <MenuContent>
                       {survey.status === "draft" && isInstructor && (
                         <>
-                          <MenuItem value="edit" asChild>
-                            <Link href={getSurveyLink(survey)}>Edit</Link>
-                          </MenuItem>
-                          <MenuItem value="publish" onClick={() => handlePublish(survey)}>
-                            Publish
+                          <MenuItem value="edit-publish" onClick={() => handlePublish(survey)}>
+                            Edit / Publish
                           </MenuItem>
                           <MenuItem value="delete" color="red.500" onClick={() => handleDelete(survey)}>
                             Delete
@@ -533,7 +440,7 @@ export default function SurveysTable({ surveys, courseId, timezone }: SurveysTab
                           {isInstructor && (
                             <>
                               <MenuItem value="edit" asChild>
-                                <Link href={getSurveyLink(survey)}>Edit (New Version)</Link>
+                                <Link href={getSurveyLink(survey)}>Edit</Link>
                               </MenuItem>
                               <MenuItem value="close" onClick={() => handleClose(survey)}>
                                 Close
