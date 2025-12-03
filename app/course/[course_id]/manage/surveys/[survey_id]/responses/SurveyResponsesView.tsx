@@ -1,7 +1,6 @@
 "use client";
 
 import { Box, Container, Heading, Text, VStack, HStack, Table, Button, Input, Badge, Icon } from "@chakra-ui/react";
-import { useColorModeValue } from "@/components/ui/color-mode";
 import { formatInTimeZone } from "date-fns-tz";
 import { TZDate } from "@date-fns/tz";
 import { isWithinInterval, parseISO, differenceInDays, differenceInHours, isPast } from "date-fns";
@@ -118,17 +117,6 @@ export default function SurveyResponsesView({
   const [showFilters, setShowFilters] = useState(false);
   const [anonymousMode, setAnonymousMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-
-  const textColor = useColorModeValue("#000000", "#FFFFFF");
-  const cardBgColor = useColorModeValue("#E5E5E5", "#1A1A1A");
-  const borderColor = useColorModeValue("#D2D2D2", "#2D2D2D");
-  const headerBgColor = useColorModeValue("#F2F2F2", "#0D0D0D");
-  const headerTextColor = useColorModeValue("#1A202C", "#9CA3AF");
-  const tableRowBg = useColorModeValue("#E5E5E5", "#1A1A1A");
-  const emptyStateTextColor = useColorModeValue("#6B7280", "#718096");
-  const filterBadgeBg = useColorModeValue("#3B82F6", "#2563EB");
-  const overdueColor = useColorModeValue("#DC2626", "#EF4444");
-  const urgentColor = useColorModeValue("#D97706", "#F59E0B");
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -296,7 +284,7 @@ export default function SurveyResponsesView({
     <Container py={8} maxW="1200px" my={2}>
       <VStack align="stretch" gap={4} w="100%">
         {/* Title */}
-        <Heading size="2xl" color={textColor}>
+        <Heading size="2xl" color="fg">
           Survey Responses: {surveyTitle}
         </Heading>
 
@@ -306,9 +294,9 @@ export default function SurveyResponsesView({
             variant="outline"
             size="sm"
             bg="transparent"
-            borderColor={borderColor}
-            color={textColor}
-            _hover={{ bg: "rgba(160, 174, 192, 0.1)" }}
+            borderColor="border"
+            color="fg"
+            _hover={{ bg: "gray.subtle" }}
             onClick={() => router.push(`/course/${courseId}/manage/surveys`)}
           >
             ← Back to Surveys
@@ -317,15 +305,15 @@ export default function SurveyResponsesView({
             <Button
               size="sm"
               variant="outline"
-              borderColor={borderColor}
-              color={textColor}
-              _hover={{ bg: "rgba(160, 174, 192, 0.1)" }}
+              borderColor="border"
+              color="fg"
+              _hover={{ bg: "gray.subtle" }}
               onClick={() => setShowFilters(!showFilters)}
             >
               <Icon as={FiFilter} mr={2} />
               Filters
               {activeFilterCount > 0 && (
-                <Badge ml={2} bg={filterBadgeBg} color="white" borderRadius="full" px={2}>
+                <Badge ml={2} colorPalette="blue" bg="blue.solid" color="white" borderRadius="full" px={2}>
                   {activeFilterCount}
                 </Badge>
               )}
@@ -333,9 +321,10 @@ export default function SurveyResponsesView({
             <Button
               size="sm"
               variant="solid"
-              bg="#22C55E"
+              colorPalette="green"
+              bg="green.solid"
               color="white"
-              _hover={{ bg: "#16A34A" }}
+              _hover={{ bg: "green.emphasized" }}
               onClick={exportToCSV}
               disabled={filteredResponses.length === 0}
             >
@@ -346,10 +335,10 @@ export default function SurveyResponsesView({
 
         {/* Filter Panel */}
         {showFilters && (
-          <Box bg={cardBgColor} border="1px solid" borderColor={borderColor} borderRadius="lg" p={4} mb={4}>
+          <Box bg="bg.muted" border="1px solid" borderColor="border" borderRadius="lg" p={4} mb={4}>
             <VStack align="stretch" gap={4}>
               <HStack justify="space-between">
-                <Text fontWeight="bold" color={textColor}>
+                <Text fontWeight="bold" color="fg">
                   Filter Responses
                 </Text>
                 {activeFilterCount > 0 && (
@@ -361,7 +350,7 @@ export default function SurveyResponsesView({
 
               {/* Date Range Filter */}
               <Box>
-                <Text fontSize="sm" fontWeight="medium" color={textColor} mb={2}>
+                <Text fontSize="sm" fontWeight="medium" color="fg" mb={2}>
                   Date Range
                 </Text>
                 <HStack gap={2}>
@@ -372,7 +361,7 @@ export default function SurveyResponsesView({
                     onChange={(e) => setDateRangeStart(e.target.value)}
                     placeholder="Start date"
                   />
-                  <Text color={textColor}>to</Text>
+                  <Text color="fg">to</Text>
                   <Input
                     type="date"
                     size="sm"
@@ -385,7 +374,7 @@ export default function SurveyResponsesView({
 
               {/* Anonymous Mode Toggle */}
               <Box>
-                <Text fontSize="sm" fontWeight="medium" color={textColor} mb={2}>
+                <Text fontSize="sm" fontWeight="medium" color="fg" mb={2}>
                   Anonymous Mode
                 </Text>
                 <HStack gap={2}>
@@ -395,7 +384,7 @@ export default function SurveyResponsesView({
                     onChange={() => setAnonymousMode(!anonymousMode)}
                     style={{ cursor: "pointer" }}
                   />
-                  <Text fontSize="sm" color={textColor}>
+                  <Text fontSize="sm" color="fg">
                     Hide student names and submission times
                   </Text>
                 </HStack>
@@ -404,7 +393,7 @@ export default function SurveyResponsesView({
               {/* Filter by Question Columns */}
               {allQuestionNames.length > 0 && (
                 <Box>
-                  <Text fontSize="sm" fontWeight="medium" color={textColor} mb={2}>
+                  <Text fontSize="sm" fontWeight="medium" color="fg" mb={2}>
                     Show Specific Questions (leave empty to show all)
                   </Text>
                   <VStack align="stretch" gap={2}>
@@ -416,7 +405,7 @@ export default function SurveyResponsesView({
                           onChange={() => toggleQuestion(qName)}
                           style={{ cursor: "pointer" }}
                         />
-                        <Text fontSize="sm" color={textColor}>
+                        <Text fontSize="sm" color="fg">
                           {questionTitles[qName] || qName}
                         </Text>
                       </HStack>
@@ -432,7 +421,7 @@ export default function SurveyResponsesView({
         {activeFilterCount > 0 && (
           <HStack gap={2} wrap="wrap" mb={4}>
             {dateRangeStart && dateRangeEnd && (
-              <Badge bg={filterBadgeBg} color="white" px={3} py={1} borderRadius="full">
+              <Badge colorPalette="blue" bg="blue.solid" color="white" px={3} py={1} borderRadius="full">
                 Date: {dateRangeStart} to {dateRangeEnd}
                 <Icon
                   as={FiX}
@@ -446,13 +435,13 @@ export default function SurveyResponsesView({
               </Badge>
             )}
             {selectedQuestions.length > 0 && (
-              <Badge bg={filterBadgeBg} color="white" px={3} py={1} borderRadius="full">
+              <Badge colorPalette="blue" bg="blue.solid" color="white" px={3} py={1} borderRadius="full">
                 Showing {selectedQuestions.length} question{selectedQuestions.length !== 1 ? "s" : ""}
                 <Icon as={FiX} ml={2} cursor="pointer" onClick={() => setSelectedQuestions([])} />
               </Badge>
             )}
             {anonymousMode && (
-              <Badge bg={filterBadgeBg} color="white" px={3} py={1} borderRadius="full">
+              <Badge colorPalette="blue" bg="blue.solid" color="white" px={3} py={1} borderRadius="full">
                 Anonymous Mode
                 <Icon as={FiX} ml={2} cursor="pointer" onClick={() => setAnonymousMode(false)} />
               </Badge>
@@ -461,65 +450,65 @@ export default function SurveyResponsesView({
         )}
       </VStack>
 
-      <Text color={textColor} mb={6}>
+      <Text color="fg" mb={6}>
         Viewing all responses for version {surveyVersion}
       </Text>
 
       {/* Summary Cards */}
       <HStack gap={4} mb={8} justify="flex-start" wrap="wrap">
         <Box
-          bg={cardBgColor}
+          bg="bg.muted"
           border="1px solid"
-          borderColor={borderColor}
+          borderColor="border"
           borderRadius="lg"
           p={4}
           minW="200px"
           flex="1"
         >
-          <Text fontSize="sm" color={headerTextColor} mb={1}>
+          <Text fontSize="sm" color="fg.muted" mb={1}>
             TOTAL RESPONSES
           </Text>
-          <Text fontSize="2xl" fontWeight="bold" color={textColor}>
+          <Text fontSize="2xl" fontWeight="bold" color="fg">
             {filteredResponses.length}
             {activeFilterCount > 0 && (
-              <Text as="span" fontSize="sm" color={headerTextColor} ml={2}>
+              <Text as="span" fontSize="sm" color="fg.muted" ml={2}>
                 / {totalResponses}
               </Text>
             )}
           </Text>
         </Box>
         <Box
-          bg={cardBgColor}
+          bg="bg.muted"
           border="1px solid"
-          borderColor={borderColor}
+          borderColor="border"
           borderRadius="lg"
           p={4}
           minW="200px"
           flex="1"
         >
-          <Text fontSize="sm" color={headerTextColor} mb={1}>
+          <Text fontSize="sm" color="fg.muted" mb={1}>
             RESPONSE RATE
           </Text>
-          <Text fontSize="2xl" fontWeight="bold" color={textColor}>
+          <Text fontSize="2xl" fontWeight="bold" color="fg">
             {responseRate}%
           </Text>
         </Box>
         <Box
-          bg={cardBgColor}
+          bg="bg.muted"
           border="1px solid"
-          borderColor={borderColor}
+          borderColor="border"
           borderRadius="lg"
           p={4}
           minW="200px"
           flex="1"
         >
-          <Text fontSize="sm" color={headerTextColor} mb={1}>
+          <Text fontSize="sm" color="fg.muted" mb={1}>
             TIME REMAINING
           </Text>
           <Text
             fontSize="2xl"
             fontWeight="bold"
-            color={isOverdue ? overdueColor : isLessThan24Hours ? urgentColor : textColor}
+            color={isOverdue ? "red.fg" : isLessThan24Hours ? "orange.fg" : "fg"}
           >
             {timeRemaining}
           </Text>
@@ -527,14 +516,14 @@ export default function SurveyResponsesView({
       </HStack>
 
       {/* Responses Table */}
-      <Box border="1px solid" borderColor={borderColor} borderRadius="lg" overflow="hidden" overflowX="auto">
+      <Box border="1px solid" borderColor="border" borderRadius="lg" overflow="hidden" overflowX="auto">
         <Table.Root variant="outline" size="md">
           <Table.Header>
-            <Table.Row bg={headerBgColor}>
+            <Table.Row bg="bg.subtle">
               {!anonymousMode && (
                 <>
                   <Table.ColumnHeader
-                    color={headerTextColor}
+                    color="fg.muted"
                     fontSize="xs"
                     fontWeight="semibold"
                     textTransform="uppercase"
@@ -544,7 +533,7 @@ export default function SurveyResponsesView({
                     STUDENT NAME
                   </Table.ColumnHeader>
                   <Table.ColumnHeader
-                    color={headerTextColor}
+                    color="fg.muted"
                     fontSize="xs"
                     fontWeight="semibold"
                     textTransform="uppercase"
@@ -557,7 +546,7 @@ export default function SurveyResponsesView({
               {visibleQuestions.map((questionName, index) => (
                 <Table.ColumnHeader
                   key={questionName}
-                  color={headerTextColor}
+                  color="fg.muted"
                   fontSize="xs"
                   fontWeight="semibold"
                   textTransform="uppercase"
@@ -572,9 +561,9 @@ export default function SurveyResponsesView({
           </Table.Header>
           <Table.Body>
             {filteredResponses.length === 0 ? (
-              <Table.Row bg={tableRowBg} borderColor={borderColor}>
+              <Table.Row bg="bg.muted" borderColor="border">
                 <Table.Cell colSpan={(anonymousMode ? 0 : 2) + visibleQuestions.length} py={4} textAlign="center">
-                  <Text color={emptyStateTextColor}>
+                  <Text color="fg.muted">
                     {totalResponses === 0
                       ? "Students haven't submitted any responses to this survey."
                       : "No responses match the current filters."}
@@ -585,14 +574,14 @@ export default function SurveyResponsesView({
               filteredResponses.map((response) => {
                 const answers = (response.response ?? {}) as Record<string, unknown>;
                 return (
-                  <Table.Row key={response.id} bg={tableRowBg} borderColor={borderColor}>
+                  <Table.Row key={response.id} bg="bg.muted" borderColor="border">
                     {!anonymousMode && (
                       <>
                         <Table.Cell py={4} pl={6}>
-                          <Text color={textColor}>{response.profiles?.name || "N/A"}</Text>
+                          <Text color="fg">{response.profiles?.name || "N/A"}</Text>
                         </Table.Cell>
                         <Table.Cell py={4}>
-                          <Text color={textColor}>
+                          <Text color="fg">
                             {response.submitted_at
                               ? formatInTimeZone(new TZDate(response.submitted_at), timezone, "MMM d, yyyy, h:mm a")
                               : "—"}
@@ -607,7 +596,7 @@ export default function SurveyResponsesView({
                         pl={anonymousMode && index === 0 ? 6 : undefined}
                         pr={questionName === visibleQuestions[visibleQuestions.length - 1] ? 6 : undefined}
                       >
-                        <Text color={textColor}>{formatResponseValue(answers[questionName])}</Text>
+                        <Text color="fg">{formatResponseValue(answers[questionName])}</Text>
                       </Table.Cell>
                     ))}
                   </Table.Row>
