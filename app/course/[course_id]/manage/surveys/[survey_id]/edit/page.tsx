@@ -150,7 +150,7 @@ export default function EditSurveyPage() {
         }
 
         // Load assigned students
-        let assignedStudents: string[] = []; 
+        const assignedStudents: string[] = [];
 
         // Load the survey data into the form
         reset({

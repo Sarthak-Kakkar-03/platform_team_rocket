@@ -121,21 +121,21 @@ export default function StudentSurveysPage() {
         const peerSurveys = surveysWithResponse.filter((s) => s.survey_type === "peer_review");
         if (peerSurveys.length > 0) {
           const targetProfileNamesMap = new Map<string, string>();
-          const peerSurveyResponses = responsesData?.filter((r) =>
-            peerSurveys.some((ps) => ps.id === r.survey_id)
-          );
+          const peerSurveyResponses = responsesData?.filter((r) => peerSurveys.some((ps) => ps.id === r.survey_id));
 
           if (peerSurveyResponses && peerSurveyResponses.length > 0) {
             const responseIds = peerSurveyResponses.map((r) => r.id);
-            
+
             // JOIN peer_surveys with profiles and survey_responses in a single query
             const { data: peerSurveyData, error: peerSurveyError } = await supabase
               .from("peer_surveys")
-              .select(`
+              .select(
+                `
                 survey_response_id,
                 profiles!inner(id, name),
                 survey_responses!inner(survey_id)
-              `)
+              `
+              )
               .in("survey_response_id", responseIds)
               .eq("profiles.class_id", Number(course_id));
 
@@ -158,7 +158,7 @@ export default function StudentSurveysPage() {
               }
             });
           }
-          
+
           setTargetProfileNames(targetProfileNamesMap);
         }
       } catch (error) {
@@ -300,7 +300,15 @@ export default function StudentSurveysPage() {
             </Box>
           ) : (
             filteredSurveys.map((survey) => (
-              <Box key={survey.id} w="100%" bg="bg.muted" border="1px solid" borderColor="border" borderRadius="lg" p={6}>
+              <Box
+                key={survey.id}
+                w="100%"
+                bg="bg.muted"
+                border="1px solid"
+                borderColor="border"
+                borderRadius="lg"
+                p={6}
+              >
                 <VStack align="stretch" gap={4}>
                   <HStack justify="space-between" align="start">
                     <VStack align="start" gap={2} flex={1}>

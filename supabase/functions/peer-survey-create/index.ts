@@ -4,7 +4,12 @@
 
 // Setup type definitions for built-in Supabase Runtime APIs
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { assertUserIsInCourse, wrapRequestHandler, UserVisibleError, IllegalArgumentError } from "../_shared/HandlerUtils.ts";
+import {
+  assertUserIsInCourse,
+  wrapRequestHandler,
+  UserVisibleError,
+  IllegalArgumentError
+} from "../_shared/HandlerUtils.ts";
 
 //Function for creating a peer survey
 //assignment_id: -1 for all groups, 0 throws error, >0 for a specific assignment
@@ -104,9 +109,9 @@ async function createPeerSurveyForGroup(group_id: number, supabase: any, survey_
         //create peer_surveys entry for target:profile_id2 response:profile_id
         const { data: peer_survey, error: peerSurveyError } = await supabase
           .from("peer_surveys")
-          .insert({ 
-            target_private_profile_id: profile_id2.profile_id, 
-            survey_response_id: peer_survey_response.id 
+          .insert({
+            target_private_profile_id: profile_id2.profile_id,
+            survey_response_id: peer_survey_response.id
           })
           .select()
           .single();
@@ -187,10 +192,7 @@ async function handleRequest(req: Request) {
   } catch (error) {
     // Rollback: delete the survey if peer survey creation fails
     console.error("Peer survey creation failed, rolling back survey:", error);
-    const { error: deleteError } = await supabase
-      .from("surveys")
-      .delete()
-      .eq("id", survey.id);
+    const { error: deleteError } = await supabase.from("surveys").delete().eq("id", survey.id);
 
     if (deleteError) {
       console.error("Failed to delete survey during rollback:", deleteError);

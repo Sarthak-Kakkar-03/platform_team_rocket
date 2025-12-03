@@ -15,12 +15,7 @@ type PollResponsesHeaderProps = {
   onPollStatusChange: (isLive: boolean) => void;
 };
 
-export default function PollResponsesHeader({
-  courseID,
-  pollID,
-  pollIsLive,
-  onPresent
-}: PollResponsesHeaderProps) {
+export default function PollResponsesHeader({ courseID, pollID, pollIsLive, onPresent }: PollResponsesHeaderProps) {
   const router = useRouter();
 
   const buttonTextColor = useColorModeValue("#4B5563", "#A0AEC0");
