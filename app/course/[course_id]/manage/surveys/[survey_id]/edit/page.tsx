@@ -37,25 +37,6 @@ const getParam = (value: string | string[] | undefined, name: string): string =>
   throw new Error(`Missing route param: ${name}`);
 };
 
-// localStorage helpers for caching assigned students in drafts
-const getAssignedStudentsKey = (surveyId: string) => `survey_assigned_students_${surveyId}`;
-
-const getCachedAssignedStudents = (surveyId: string): string[] | null => {
-  if (typeof window === "undefined") return null;
-  const cached = localStorage.getItem(getAssignedStudentsKey(surveyId));
-  return cached ? JSON.parse(cached) : null;
-};
-
-const setCachedAssignedStudents = (surveyId: string, students: string[]) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(getAssignedStudentsKey(surveyId), JSON.stringify(students));
-};
-
-const clearCachedAssignedStudents = (surveyId: string) => {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(getAssignedStudentsKey(surveyId));
-};
-
 export default function EditSurveyPage() {
   const { course_id, survey_id } = useParams();
   const router = useRouter();
@@ -168,19 +149,8 @@ export default function EditSurveyPage() {
           dueDateFormatted = formatInTimeZone(new Date(data.due_date), timezone, "yyyy-MM-dd'T'HH:mm");
         }
 
-        // Load assigned students: check localStorage first (draft cache), then survey_responses (published)
-        let assignedStudents: string[] = [];
-        const cachedStudents = getCachedAssignedStudents(data.id);
-        if (cachedStudents && cachedStudents.length > 0) {
-          assignedStudents = cachedStudents;
-        } else {
-          const { data: assignmentData } = await supabase
-            .from("survey_responses")
-            .select("profile_id")
-            .eq("survey_id", data.id)
-            .is("deleted_at", null);
-          assignedStudents = assignmentData?.map((a) => a.profile_id) || [];
-        }
+        // Load assigned students
+        let assignedStudents: string[] = []; 
 
         // Load the survey data into the form
         reset({
@@ -259,17 +229,6 @@ export default function EditSurveyPage() {
           if (error || !data) {
             console.error("Draft save error:", error);
             throw new Error(error?.message || "Failed to save draft");
-          }
-
-          // Cache assigned students to localStorage for draft persistence
-          if (
-            values.survey_type === "specific_students" &&
-            values.assigned_students &&
-            values.assigned_students.length > 0
-          ) {
-            setCachedAssignedStudents(rawSurveyId, values.assigned_students as string[]);
-          } else {
-            clearCachedAssignedStudents(rawSurveyId);
           }
 
           trackEvent("survey_updated", {
@@ -437,19 +396,6 @@ export default function EditSurveyPage() {
                   description: "Survey was updated but there was an error assigning it to specific students."
                 });
               }
-            }
-            // Clear localStorage cache after publishing
-            clearCachedAssignedStudents(rawSurveyId);
-          } else {
-            // Cache to localStorage for drafts (specific_students only)
-            if (
-              values.survey_type === "specific_students" &&
-              values.assigned_students &&
-              values.assigned_students.length > 0
-            ) {
-              setCachedAssignedStudents(rawSurveyId, values.assigned_students as string[]);
-            } else {
-              clearCachedAssignedStudents(rawSurveyId);
             }
           }
 

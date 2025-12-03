@@ -30,26 +30,6 @@ type SurveyFormData = {
 type SurveyStatus = Tables<"surveys">["status"]; // "draft" | "published" | "closed"
 type SurveyIds = Pick<Tables<"surveys">, "id" | "survey_id">;
 
-// localStorage helpers for caching assigned students in drafts
-const getAssignedStudentsKey = (courseId: string, surveyId?: string) =>
-  surveyId ? `survey_assigned_students_${surveyId}` : `survey_assigned_students_new_${courseId}`;
-
-const getCachedAssignedStudents = (courseId: string, surveyId?: string): string[] | null => {
-  if (typeof window === "undefined") return null;
-  const cached = localStorage.getItem(getAssignedStudentsKey(courseId, surveyId));
-  return cached ? JSON.parse(cached) : null;
-};
-
-const setCachedAssignedStudents = (courseId: string, students: string[], surveyId?: string) => {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(getAssignedStudentsKey(courseId, surveyId), JSON.stringify(students));
-};
-
-const clearCachedAssignedStudents = (courseId: string, surveyId?: string) => {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(getAssignedStudentsKey(courseId, surveyId));
-};
-
 export default function NewSurveyPage() {
   const { course_id } = useParams();
   const router = useRouter();
@@ -116,19 +96,6 @@ export default function NewSurveyPage() {
   const { setValue, reset } = form;
   const hasLoadedDraft = useRef(false);
   const hasLoadedTemplate = useRef(false);
-  const hasLoadedCachedStudents = useRef(false);
-
-  // Load cached assigned students from localStorage (for draft persistence)
-  useEffect(() => {
-    if (hasLoadedCachedStudents.current) return;
-    hasLoadedCachedStudents.current = true;
-
-    const cached = getCachedAssignedStudents(String(course_id));
-    if (cached && cached.length > 0) {
-      setValue("assigned_students", cached, { shouldDirty: false });
-      setValue("survey_type", "specific_students", { shouldDirty: false });
-    }
-  }, [course_id, setValue]);
 
   // Load template if template_id query parameter is present
   useEffect(() => {
@@ -219,15 +186,8 @@ export default function NewSurveyPage() {
               dueDateFormatted = formatInTimeZone(new Date(data.due_date), timezone, "yyyy-MM-dd'T'HH:mm");
             }
 
-            // Load existing survey response assignments (students assigned to this survey)
-            const { data: assignmentData } = await supabase
-              .from("survey_responses")
-              .select("profile_id")
-              .eq("survey_id", data.id)
-              .is("deleted_at", null);
-
-            const assignedStudents = assignmentData?.map((a) => a.profile_id) || [];
-            console.log("[loadLatestDraft] Loaded assignments:", assignedStudents);
+            // Drafts don't have survey_responses
+            const assignedStudents: string[] = [];
 
             // Load the draft data into the form
             const formData = {
@@ -475,7 +435,6 @@ export default function NewSurveyPage() {
           values.assigned_students.length > 0
         ) {
           // Create survey_responses for specific students
-          console.log("[saveSurvey] creating survey response assignments for:", values.assigned_students);
           const { error: assignmentError } = await supabase.rpc("create_survey_response_assignments", {
             p_survey_id: data.id,
             p_profile_ids: values.assigned_students
@@ -488,19 +447,6 @@ export default function NewSurveyPage() {
               description: "Survey was created but there was an error assigning it to specific students."
             });
           }
-        }
-        // Clear localStorage cache after publishing
-        clearCachedAssignedStudents(String(course_id), data.id);
-      } else {
-        // Cache to localStorage for drafts (specific_students only)
-        if (
-          values.survey_type === "specific_students" &&
-          values.assigned_students &&
-          values.assigned_students.length > 0
-        ) {
-          setCachedAssignedStudents(String(course_id), values.assigned_students as string[], data.id);
-        } else {
-          clearCachedAssignedStudents(String(course_id), data.id);
         }
       }
 
