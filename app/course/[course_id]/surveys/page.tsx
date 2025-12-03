@@ -130,7 +130,12 @@ export default function StudentSurveysPage() {
             if (response.is_submitted) {
               response_status = "completed";
             } else {
-              response_status = "in_progress";
+              // Check if response JSON is empty (no progress saved)
+              const responseJson = response.response as Record<string, unknown> | null | undefined;
+              const isEmpty =
+                !responseJson || (typeof responseJson === "object" && Object.keys(responseJson).length === 0);
+
+              response_status = isEmpty ? "not_started" : "in_progress";
             }
           }
 
