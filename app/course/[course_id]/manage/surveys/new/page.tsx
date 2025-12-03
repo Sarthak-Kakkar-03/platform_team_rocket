@@ -22,8 +22,9 @@ type SurveyFormData = {
   status: "draft" | "published";
   due_date?: string;
   allow_response_editing: boolean;
-  assigned_to_all: boolean;
+  survey_type: "assign_all" | "specific_students" | "peer_review";
   assigned_students?: string[];
+  assignment_id?: number;
 };
 
 type SurveyStatus = Tables<"surveys">["status"]; // "draft" | "published" | "closed"
@@ -86,8 +87,9 @@ export default function NewSurveyPage() {
       status: "draft",
       due_date: "",
       allow_response_editing: false,
-      assigned_to_all: true,
-      assigned_students: []
+      survey_type: "assign_all",
+      assigned_students: [],
+      assignment_id: -1
     }
   });
 
@@ -177,11 +179,6 @@ export default function NewSurveyPage() {
             .single();
 
           if (data && !error) {
-            console.log("[loadLatestDraft] Raw data from DB:", data);
-            console.log("[loadLatestDraft] due_date:", data.due_date);
-            console.log("[loadLatestDraft] allow_response_editing:", data.allow_response_editing);
-            console.log("[loadLatestDraft] status:", data.status);
-
             // Convert due_date from ISO string to datetime-local format in course timezone
             let dueDateFormatted = "";
             if (data.due_date) {
@@ -189,14 +186,8 @@ export default function NewSurveyPage() {
               dueDateFormatted = formatInTimeZone(new Date(data.due_date), timezone, "yyyy-MM-dd'T'HH:mm");
             }
 
-            // Load existing survey assignments if any
-            const { data: assignmentData } = await supabase
-              .from("survey_assignments")
-              .select("profile_id")
-              .eq("survey_id", data.id);
-
-            const assignedStudents = assignmentData?.map((a) => a.profile_id) || [];
-            console.log("[loadLatestDraft] Loaded assignments:", assignedStudents);
+            // Drafts don't have survey_responses
+            const assignedStudents: string[] = [];
 
             // Load the draft data into the form
             const formData = {
@@ -205,8 +196,8 @@ export default function NewSurveyPage() {
               json: data.json || "",
               status: data.status || "draft",
               due_date: dueDateFormatted,
-              allow_response_editing: Boolean(data.allow_response_editing),
-              assigned_to_all: data.assigned_to_all !== undefined ? data.assigned_to_all : true,
+              allow_response_editing: data.allow_response_editing,
+              survey_type: data.survey_type || "assign_all",
               assigned_students: assignedStudents
             };
 
@@ -302,10 +293,10 @@ export default function NewSurveyPage() {
           description: (values.description as string) || null,
           json: jsonToStore,
           status: finalStatus,
-          allow_response_editing: values.allow_response_editing?.checked ?? Boolean(values.allow_response_editing),
+          allow_response_editing: values.allow_response_editing,
           due_date: convertDueDateToISO(values.due_date as string),
           validation_errors: validationErrors,
-          assigned_to_all: values.assigned_to_all?.checked ?? Boolean(values.assigned_to_all),
+          survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review",
           updated_at: new Date().toISOString()
         };
 
@@ -342,11 +333,10 @@ export default function NewSurveyPage() {
             description: (values.description as string) || null,
             json: jsonToStore,
             status: finalStatus,
-            allow_response_editing: values.allow_response_editing?.checked ?? Boolean(values.allow_response_editing),
+            allow_response_editing: values.allow_response_editing,
             due_date: convertDueDateToISO(values.due_date as string),
             validation_errors: validationErrors,
-            assigned_to_all: Boolean(values.assigned_to_all),
-            updated_at: new Date().toISOString()
+            survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
           };
 
           const result = await supabase
@@ -361,21 +351,17 @@ export default function NewSurveyPage() {
           error = result.error;
         } else {
           // Should not happen if logic is correct, but treat as new
-          const survey_id = crypto.randomUUID();
           const insertPayload = {
-            survey_id,
-            version: 1,
             class_id: Number(course_id),
             created_by: private_profile_id,
             title: (values.title as string) || "Untitled Survey",
             description: (values.description as string) || null,
             json: jsonToStore,
             status: finalStatus,
-            created_at: new Date().toISOString(),
-            allow_response_editing: Boolean(values.allow_response_editing?.checked ?? values.allow_response_editing),
+            allow_response_editing: values.allow_response_editing,
             due_date: convertDueDateToISO(values.due_date as string),
             validation_errors: validationErrors,
-            assigned_to_all: Boolean(values.assigned_to_all)
+            survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
           };
 
           const result = await supabase
@@ -391,22 +377,17 @@ export default function NewSurveyPage() {
         }
       } else {
         // Not returning from preview and no current ID - always create new survey
-        const survey_id = crypto.randomUUID();
-
         const insertPayload = {
-          survey_id,
-          version: 1,
           class_id: Number(course_id),
           created_by: private_profile_id,
           title: (values.title as string) || "Untitled Survey",
           description: (values.description as string) || null,
           json: jsonToStore,
           status: finalStatus,
-          created_at: new Date().toISOString(),
-          allow_response_editing: Boolean(values.allow_response_editing?.checked ?? values.allow_response_editing),
+          allow_response_editing: values.allow_response_editing,
           due_date: convertDueDateToISO(values.due_date as string),
           validation_errors: validationErrors,
-          assigned_to_all: Boolean(values.assigned_to_all)
+          survey_type: values.survey_type as "assign_all" | "specific_students" | "peer_review"
         };
 
         console.log("[saveSurvey] creating new survey:", insertPayload);
@@ -432,21 +413,40 @@ export default function NewSurveyPage() {
         throw new Error(error?.message || "Failed to save survey");
       }
 
-      // Handle survey assignments if not assigned to all students
-      if (!values.assigned_to_all && values.assigned_students && values.assigned_students.length > 0) {
-        console.log("[saveSurvey] creating survey assignments for:", values.assigned_students);
-        const { error: assignmentError } = await supabase.rpc("create_survey_assignments", {
-          p_survey_id: data.id,
-          p_profile_ids: values.assigned_students
-        });
-
-        if (assignmentError) {
-          console.error("[saveSurvey] assignment error:", assignmentError);
-          toaster.error({
-            title: "Warning",
-            description:
-              "Survey was created but there was an error assigning it to specific students. Please try editing the survey to reassign."
+      // Handle survey response creation based on survey_type (only when publishing)
+      if (finalStatus === "published") {
+        if (values.survey_type === "assign_all") {
+          // Create survey_responses for ALL students in the class
+          console.log("[saveSurvey] creating survey responses for all students");
+          const { error: assignmentError } = await supabase.rpc("create_survey_responses_for_all_students", {
+            p_survey_id: data.id
           });
+
+          if (assignmentError) {
+            console.error("[saveSurvey] assignment error:", assignmentError);
+            toaster.error({
+              title: "Warning",
+              description: "Survey was created but there was an error assigning it to students."
+            });
+          }
+        } else if (
+          values.survey_type === "specific_students" &&
+          values.assigned_students &&
+          values.assigned_students.length > 0
+        ) {
+          // Create survey_responses for specific students
+          const { error: assignmentError } = await supabase.rpc("create_survey_response_assignments", {
+            p_survey_id: data.id,
+            p_profile_ids: values.assigned_students
+          });
+
+          if (assignmentError) {
+            console.error("[saveSurvey] assignment error:", assignmentError);
+            toaster.error({
+              title: "Warning",
+              description: "Survey was created but there was an error assigning it to specific students."
+            });
+          }
         }
       }
 
@@ -456,7 +456,7 @@ export default function NewSurveyPage() {
         survey_id: data.survey_id,
         status: finalStatus,
         has_due_date: !!values.due_date,
-        allow_response_editing: Boolean(values.allow_response_editing?.checked ?? values.allow_response_editing),
+        allow_response_editing: values.allow_response_editing,
         has_validation_errors: !!validationErrors,
         is_update: isReturningFromPreview
       });
@@ -511,6 +511,101 @@ export default function NewSurveyPage() {
   // -------- FULL SUBMIT (WRAPPER) --------
   const onSubmit = useCallback(
     async (values: FieldValues) => {
+      // Handle Peer Review separately
+      if (values.survey_type === "peer_review") {
+        // Show loading toast
+        const loadingToast = toaster.create({
+          title: "Creating Peer Review Survey",
+          description: "Setting up peer review assignments...",
+          type: "loading"
+        });
+
+        try {
+          const supabase = createClient();
+          const dueDateISO = convertDueDateToISO(values.due_date as string);
+
+          // Validate required fields
+          if (!values.title || !values.json) {
+            toaster.dismiss(loadingToast);
+            toaster.create({
+              title: "Missing Required Fields",
+              description: "Please provide a title and survey configuration.",
+              type: "error"
+            });
+            return;
+          }
+
+          if (!dueDateISO) {
+            toaster.dismiss(loadingToast);
+            toaster.create({
+              title: "Due Date Required",
+              description: "Please provide a due date for the peer review survey.",
+              type: "error"
+            });
+            return;
+          }
+
+          if (!values.assignment_id || values.assignment_id === -1) {
+            toaster.dismiss(loadingToast);
+            toaster.create({
+              title: "Assignment Required",
+              description: "Please select an assignment for the peer review survey.",
+              type: "error"
+            });
+            return;
+          }
+
+          // Call peer-survey-create edge function
+          const { data: responseData, error } = await supabase.functions.invoke("peer-survey-create", {
+            body: {
+              class_id: Number(course_id),
+              assignment_id: values.assignment_id || -1,
+              title: values.title as string,
+              description: (values.description as string) || "",
+              survey_json: values.json as string,
+              due_date: dueDateISO
+            }
+          });
+
+          toaster.dismiss(loadingToast);
+
+          if (error) {
+            console.error("[onSubmit] peer-survey-create error:", error);
+            toaster.error({
+              title: "Error Creating Peer Review",
+              description: error.message || "Failed to create peer review survey"
+            });
+            return;
+          }
+
+          if (!responseData || !responseData.success) {
+            console.error("[onSubmit] peer-survey-create failed:", responseData);
+            toaster.error({
+              title: "Error Creating Peer Review",
+              description: "Failed to create peer review survey. Please try again."
+            });
+            return;
+          }
+
+          toaster.create({
+            title: "Peer Review Survey Created",
+            description: "Peer review assignments have been created successfully.",
+            type: "success"
+          });
+
+          // Redirect to surveys page
+          router.push(`/course/${course_id}/manage/surveys`);
+          return;
+        } catch (err: unknown) {
+          console.error("[onSubmit] peer review error:", err);
+          toaster.error({
+            title: "Error creating peer review",
+            description: err instanceof Error ? err.message : "An unexpected error occurred"
+          });
+          return;
+        }
+      }
+
       // Validate due date if trying to publish
       if (values.status === "published" && values.due_date) {
         const dueDateISO = convertDueDateToISO(values.due_date as string);
@@ -530,10 +625,13 @@ export default function NewSurveyPage() {
       }
 
       // Validate student assignments
-      if (!values.assigned_to_all && (!values.assigned_students || values.assigned_students.length === 0)) {
+      if (
+        values.survey_type === "specific_students" &&
+        (!values.assigned_students || values.assigned_students.length === 0)
+      ) {
         toaster.create({
           title: "Cannot Save Survey",
-          description: "Please select at least one student or change assignment mode to 'all students'.",
+          description: "Please select at least one student or change assignment mode.",
           type: "error"
         });
         return;

@@ -19,7 +19,8 @@ type SurveyResponsesViewProps = {
   surveyJson: Survey["json"]; // The JSON configuration of the survey
   surveyDueDate: Survey["due_date"]; // The deadline for the survey
   responses: SurveyResponseWithProfile[];
-  totalStudents: number;
+  totalStudents: number; // Total assigned (from survey_responses)
+  respondedCount: number; // Count of is_submitted=true
   timezone: string; // Course timezone for date formatting
 };
 
@@ -104,6 +105,7 @@ export default function SurveyResponsesView({
   surveyDueDate,
   responses,
   totalStudents,
+  respondedCount,
   timezone
 }: SurveyResponsesViewProps) {
   const router = useRouter();
@@ -202,7 +204,8 @@ export default function SurveyResponsesView({
     });
   }, []);
 
-  const responseRate = totalStudents > 0 ? ((filteredResponses.length / totalStudents) * 100).toFixed(0) : 0;
+  // Response rate uses respondedCount (is_submitted=true) / totalStudents (all assigned)
+  const responseRate = totalStudents > 0 ? ((respondedCount / totalStudents) * 100).toFixed(0) : 0;
 
   // Calculate time remaining until deadline
   let timeRemaining = "—";

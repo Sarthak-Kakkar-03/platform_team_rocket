@@ -9,12 +9,17 @@ import Link from "@/components/ui/link";
 import { formatInTimeZone } from "date-fns-tz";
 import { SurveyWithResponse } from "@/types/survey";
 import SurveyFilterButtons from "@/components/survey/SurveyFilterButtons";
+import { useClassProfiles } from "@/hooks/useClassProfiles";
+import useAuthState from "@/hooks/useAuthState";
 
 type FilterType = "all" | "not_started" | "completed";
 
 export default function StudentSurveysPage() {
   const { course_id } = useParams();
+  const { private_profile_id } = useClassProfiles();
+  const { user } = useAuthState();
   const [surveys, setSurveys] = useState<SurveyWithResponse[]>([]);
+  const [targetProfileNames, setTargetProfileNames] = useState<Map<string, string>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
 
@@ -36,52 +41,38 @@ export default function StudentSurveysPage() {
 
   useEffect(() => {
     const loadSurveys = async () => {
+      if (!user || !private_profile_id) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         const supabase = createClient();
+        // Get this profile's survey responses (students can only see their own responses)
+        const { data: responsesData, error: responsesError } = await supabase
+          .from("survey_responses")
+          .select("*")
+          .eq("profile_id", private_profile_id);
 
-        // Get current user
-        const {
-          data: { user }
-        } = await supabase.auth.getUser();
-        if (!user) {
-          toaster.create({
-            title: "Authentication Required",
-            description: "Please log in to view surveys.",
-            type: "error"
-          });
+        if (responsesError) {
+          throw responsesError;
+        }
+
+        // If there are no responses, there are no surveys to show
+        if (!responsesData || responsesData.length === 0) {
+          setSurveys([]);
           setIsLoading(false);
           return;
         }
 
-        // Resolve this user's class-specific profile (private_profile_id) for this course
-        const { data: roleDataRaw, error: roleError } = await supabase
-          .from("user_roles")
-          .select("private_profile_id")
-          .eq("user_id", user.id)
-          .eq("class_id", Number(course_id))
-          .eq("role", "student")
-          .eq("disabled", false)
-          .single();
+        // Get unique survey IDs from responses
+        const surveyIds = [...new Set(responsesData.map((r) => r.survey_id))];
 
-        // Tell TypeScript what we actually expect from that query
-        const roleData = roleDataRaw as { private_profile_id: string } | null;
-
-        if (roleError || !roleData || !roleData.private_profile_id) {
-          toaster.create({
-            title: "Access Error",
-            description: "We couldn't find your course profile.",
-            type: "error"
-          });
-          setIsLoading(false);
-          return;
-        }
-
-        const profileId = roleData.private_profile_id;
-
-        // Get published surveys for this course (and not soft-deleted)
+        // Get surveys associated with these responses (only published and not deleted)
         const { data: surveysData, error: surveysError } = await supabase
           .from("surveys")
           .select("*")
+          .in("id", surveyIds)
           .eq("class_id", Number(course_id))
           .eq("status", "published")
           .is("deleted_at", null)
@@ -91,37 +82,28 @@ export default function StudentSurveysPage() {
           throw surveysError;
         }
 
-        // If there are no surveys, just finish early
+        // If no surveys found (shouldn't happen, but handle gracefully)
         if (!surveysData || surveysData.length === 0) {
           setSurveys([]);
           setIsLoading(false);
           return;
         }
 
-        // Get this profile's responses for those surveys
-        const { data: responsesData, error: responsesError } = await supabase
-          .from("survey_responses")
-          .select("*")
-          .eq("profile_id", profileId)
-          .in(
-            "survey_id",
-            surveysData.map((s) => s.id)
-          );
-
-        if (responsesError) {
-          throw responsesError;
-        }
-
         // Merge surveys with the current profile's response status
         const surveysWithResponse: SurveyWithResponse[] = surveysData.map((survey) => {
-          const response = responsesData?.find((r) => r.survey_id === survey.id);
+          const response = responsesData.find((r) => r.survey_id === survey.id);
 
           let response_status: "not_started" | "in_progress" | "completed" = "not_started";
           if (response) {
             if (response.is_submitted) {
               response_status = "completed";
             } else {
-              response_status = "in_progress";
+              // Check if response JSON is empty (no progress saved)
+              const responseJson = response.response as Record<string, unknown> | null | undefined;
+              const isEmpty =
+                !responseJson || (typeof responseJson === "object" && Object.keys(responseJson).length === 0);
+
+              response_status = isEmpty ? "not_started" : "in_progress";
             }
           }
 
@@ -134,6 +116,51 @@ export default function StudentSurveysPage() {
         });
 
         setSurveys(surveysWithResponse);
+
+        // For peer surveys, fetch target profile names using JOIN
+        const peerSurveys = surveysWithResponse.filter((s) => s.survey_type === "peer_review");
+        if (peerSurveys.length > 0) {
+          const targetProfileNamesMap = new Map<string, string>();
+          const peerSurveyResponses = responsesData?.filter((r) =>
+            peerSurveys.some((ps) => ps.id === r.survey_id)
+          );
+
+          if (peerSurveyResponses && peerSurveyResponses.length > 0) {
+            const responseIds = peerSurveyResponses.map((r) => r.id);
+            
+            // JOIN peer_surveys with profiles and survey_responses in a single query
+            const { data: peerSurveyData, error: peerSurveyError } = await supabase
+              .from("peer_surveys")
+              .select(`
+                survey_response_id,
+                profiles!inner(id, name),
+                survey_responses!inner(survey_id)
+              `)
+              .in("survey_response_id", responseIds)
+              .eq("profiles.class_id", Number(course_id));
+
+            if (!peerSurveyError && peerSurveyData) {
+              // Map results: survey_id -> profile name
+              peerSurveyData.forEach((item) => {
+                const surveyId = (item.survey_responses as { survey_id: string }).survey_id;
+                const profile = item.profiles as unknown as { name: string } | null;
+                const profileName = profile?.name;
+                if (surveyId && profileName) {
+                  targetProfileNamesMap.set(surveyId, profileName);
+                }
+              });
+            }
+
+            // Set placeholder for any peer surveys without data
+            peerSurveyResponses.forEach((response) => {
+              if (!targetProfileNamesMap.has(response.survey_id)) {
+                targetProfileNamesMap.set(response.survey_id, "Name error");
+              }
+            });
+          }
+          
+          setTargetProfileNames(targetProfileNamesMap);
+        }
       } catch (error) {
         console.error("Error loading surveys:", error);
         toaster.create({
@@ -147,7 +174,7 @@ export default function StudentSurveysPage() {
     };
 
     loadSurveys();
-  }, [course_id]);
+  }, [course_id, user, private_profile_id]);
 
   const getStatusBadge = (survey: SurveyWithResponse) => {
     const status = statusColors[survey.response_status];
@@ -277,8 +304,10 @@ export default function StudentSurveysPage() {
                 <VStack align="stretch" gap={4}>
                   <HStack justify="space-between" align="start">
                     <VStack align="start" gap={2} flex={1}>
-                      <Heading size="md" color="fg">
-                        {survey.title}
+                      <Heading size="md" color={textColor}>
+                        {survey.survey_type === "peer_review"
+                          ? `${survey.title} - Reviewing ${targetProfileNames.get(survey.id) || "Name error"}`
+                          : survey.title}
                       </Heading>
                       {survey.description && (
                         <Text color="fg" fontSize="sm" opacity={0.8}>

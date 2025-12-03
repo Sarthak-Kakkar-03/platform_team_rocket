@@ -10,31 +10,34 @@ export async function saveResponse(
   const supabase = createClient();
 
   try {
-    // Upsert to survey_responses table
+    // Check if response already exists (students can only UPDATE, not INSERT)
+    const existingResponse = await getResponse(surveyId, profileID);
+
+    if (!existingResponse) {
+      throw new Error("Survey response not found. Responses must be created by the system first.");
+    }
+
+    // Update existing response
     // Set submitted_at timestamp when submitting
-    const upsertData: {
-      survey_id: string;
-      profile_id: string;
+    const updateData: {
       response: ResponseData;
       is_submitted: boolean;
       submitted_at?: string;
     } = {
-      survey_id: surveyId,
-      profile_id: profileID,
       response: responseData,
       is_submitted: isSubmitted
     };
 
-    // Set submitted_at timestamp when isSubmitted is true
-    if (isSubmitted) {
-      upsertData.submitted_at = new Date().toISOString();
+    // Set submitted_at timestamp when isSubmitted is true (only if not already set)
+    if (isSubmitted && !existingResponse.submitted_at) {
+      updateData.submitted_at = new Date().toISOString();
     }
 
     const { data, error } = await supabase
       .from("survey_responses")
-      .upsert(upsertData, {
-        onConflict: "survey_id,profile_id"
-      })
+      .update(updateData)
+      .eq("survey_id", surveyId)
+      .eq("profile_id", profileID)
       .select()
       .single();
 

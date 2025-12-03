@@ -1,13 +1,30 @@
 "use client";
 
-import { Box, Input, Textarea, Text, HStack, VStack, Button, Heading, Fieldset, Checkbox } from "@chakra-ui/react";
+import {
+  Box,
+  Input,
+  Textarea,
+  Text,
+  HStack,
+  VStack,
+  Button,
+  Heading,
+  Fieldset,
+  Checkbox,
+  SelectRoot,
+  SelectTrigger,
+  SelectValueText,
+  SelectContent,
+  SelectItem,
+  createListCollection
+} from "@chakra-ui/react";
 import { Controller, FieldValues } from "react-hook-form";
 import { Button as UIButton } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Radio, RadioGroup } from "@/components/ui/radio";
 import { toaster } from "@/components/ui/toaster";
 import { UseFormReturnType } from "@refinedev/react-hook-form";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { SurveyPreviewModal } from "@/components/survey-preview-modal";
 import { SurveyTemplateLibraryModal } from "@/components/survey/SurveyTemplateLibraryModal";
@@ -27,6 +44,11 @@ import SurveyBuilderModal from "@/components/survey/SurveyBuilderModal";
 import { createClient } from "@/utils/supabase/client";
 import type { Database } from "@/utils/supabase/SupabaseTypes";
 
+type Assignment = {
+  id: number;
+  title: string;
+};
+
 type SurveyTemplateInsert = Database["public"]["Tables"]["survey_templates"]["Insert"];
 
 type SurveyFormData = {
@@ -36,8 +58,9 @@ type SurveyFormData = {
   status: "draft" | "published";
   due_date?: string;
   allow_response_editing: boolean;
-  assigned_to_all: boolean;
+  survey_type: "assign_all" | "specific_students" | "peer_review";
   assigned_students?: string[];
+  assignment_id?: number; //for specific assignment peer review
 };
 
 const sampleJsonTemplate = `{
@@ -94,10 +117,66 @@ export default function SurveyForm({
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   // Student selector modal state
   const [isStudentSelectorOpen, setIsStudentSelectorOpen] = useState(false);
+  // Assignments for peer review dropdown
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
 
   const currentJson = watch("json");
   const currentStatus = watch("status");
   const assignedStudents = watch("assigned_students") || [];
+  const surveyType = watch("survey_type");
+
+  // Create collection for survey type dropdown
+  const surveyTypeCollection = createListCollection({
+    items: [
+      { value: "assign_all", label: "Assign to All Students" },
+      { value: "specific_students", label: "Assign to Specific Students" },
+      { value: "peer_review", label: "Peer Review" }
+    ]
+  });
+
+  // Fetch assignments for the current class
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (!course_id) return;
+
+      setIsLoadingAssignments(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("assignments")
+          .select("id, title")
+          .eq("class_id", Number(course_id))
+          .is("archived_at", null)
+          .order("due_date", { ascending: false });
+
+        if (error) {
+          console.error("Error fetching assignments:", error);
+          toaster.create({
+            title: "Error Loading Assignments",
+            description: "Failed to load assignments. Please try again.",
+            type: "error"
+          });
+        } else {
+          setAssignments(data || []);
+        }
+      } catch (err) {
+        console.error("Error fetching assignments:", err);
+      } finally {
+        setIsLoadingAssignments(false);
+      }
+    };
+
+    fetchAssignments();
+  }, [course_id]);
+
+  // Create collection for assignments dropdown
+  const assignmentsCollection = createListCollection({
+    items: assignments.map((assignment) => ({
+      value: String(assignment.id),
+      label: assignment.title
+    }))
+  });
 
   const validateJson = useCallback(() => {
     const jsonValue = getValues("json");
@@ -282,6 +361,44 @@ export default function SurveyForm({
         <form onSubmit={handleSubmit(onSubmitWrapper)}>
           <Fieldset.Root>
             <VStack align="stretch" gap={6}>
+              {/* Survey Type */}
+              <Fieldset.Content>
+                <Field label="Survey Type" required>
+                  <Controller
+                    name="survey_type"
+                    control={control}
+                    defaultValue="assign_all"
+                    rules={{ required: "Survey type is required" }}
+                    render={({ field }) => (
+                      <SelectRoot
+                        collection={surveyTypeCollection}
+                        value={[field.value]}
+                        onValueChange={(e) => {
+                          const newValue = e.value[0] as "assign_all" | "specific_students" | "peer_review";
+                          field.onChange(newValue);
+                        }}
+                      >
+                        <SelectTrigger
+                          bg={bgColor}
+                          borderColor={borderColor}
+                          color={textColor}
+                          _focus={{ borderColor: "blue.500" }}
+                        >
+                          <SelectValueText placeholder="Select survey type" />
+                        </SelectTrigger>
+                        <SelectContent bg={cardBgColor} borderColor={borderColor}>
+                          {surveyTypeCollection.items.map((item) => (
+                            <SelectItem key={item.value} item={item} color={textColor}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </SelectRoot>
+                    )}
+                  />
+                </Field>
+              </Fieldset.Content>
+
               {/* Survey Title */}
               <Fieldset.Content>
                 <Field
@@ -476,55 +593,86 @@ export default function SurveyForm({
                 />
               </Fieldset.Content>
 
-              {/* Assignment Mode */}
-              <Fieldset.Content>
-                <Field label="Assignment" required>
-                  <Controller
-                    name="assigned_to_all"
-                    control={control}
-                    defaultValue={true}
-                    render={({ field }) => (
-                      <VStack align="start" gap={3}>
-                        <RadioGroup
-                          value={field.value ? "all" : "specific"}
-                          onValueChange={(e) => field.onChange(e.value === "all")}
-                          colorPalette="blue"
-                        >
-                          <VStack align="start" gap={2}>
-                            <Radio value="all">
-                              <Text color="fg">Assign to all students in the course</Text>
-                            </Radio>
-                            <Radio value="specific">
-                              <Text color="fg">Assign to specific students</Text>
-                            </Radio>
-                          </VStack>
-                        </RadioGroup>
+              {/* Student Selection (only show for specific_students type) */}
+              {surveyType === "specific_students" && (
+                <Fieldset.Content>
+                  <Field label="Select Students" required>
+                    <Box w="100%">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        bg="transparent"
+                        borderColor={buttonBorderColor}
+                        color={buttonTextColor}
+                        _hover={{ bg: "rgba(160, 174, 192, 0.1)" }}
+                        onClick={() => setIsStudentSelectorOpen(true)}
+                      >
+                        Select Students ({assignedStudents.length} selected)
+                      </Button>
+                      {assignedStudents.length > 0 && (
+                        <Text fontSize="sm" color={placeholderColor} mt={2}>
+                          {assignedStudents.length} student{assignedStudents.length !== 1 ? "s" : ""} selected
+                        </Text>
+                      )}
+                    </Box>
+                  </Field>
+                </Fieldset.Content>
+              )}
 
-                        {field.value === false && (
-                          <Box w="100%" mt={2}>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              bg="transparent"
-                              borderColor="border.emphasized"
-                              color="fg.muted"
-                              _hover={{ bg: "gray.subtle" }}
-                              onClick={() => setIsStudentSelectorOpen(true)}
-                            >
-                              Select Students ({assignedStudents.length} selected)
-                            </Button>
-                            {assignedStudents.length > 0 && (
-                              <Text fontSize="sm" color="fg.subtle" mt={2}>
-                                {assignedStudents.length} student{assignedStudents.length !== 1 ? "s" : ""} selected
-                              </Text>
+              {/* Assignment Selection (only show for peer_review type) */}
+              {surveyType === "peer_review" && (
+                <Fieldset.Content>
+                  <Field label="Select Assignment" required>
+                    <Controller
+                      name="assignment_id"
+                      control={control}
+                      rules={{ required: "Assignment is required for peer review surveys" }}
+                      render={({ field }) => (
+                        <SelectRoot
+                          collection={assignmentsCollection}
+                          value={field.value ? [String(field.value)] : []}
+                          onValueChange={(e) => {
+                            const newValue = e.value[0] ? Number(e.value[0]) : undefined;
+                            field.onChange(newValue);
+                          }}
+                          disabled={isLoadingAssignments}
+                        >
+                          <SelectTrigger
+                            bg={bgColor}
+                            borderColor={borderColor}
+                            color={textColor}
+                            _focus={{ borderColor: "blue.500" }}
+                          >
+                            <SelectValueText
+                              placeholder={isLoadingAssignments ? "Loading assignments..." : "Select an assignment"}
+                            />
+                          </SelectTrigger>
+                          <SelectContent bg={cardBgColor} borderColor={borderColor}>
+                            {assignmentsCollection.items.length === 0 ? (
+                              <Box p={2} textAlign="center">
+                                <Text fontSize="sm" color={placeholderColor}>
+                                  {isLoadingAssignments ? "Loading assignments..." : "No assignments available"}
+                                </Text>
+                              </Box>
+                            ) : (
+                              assignmentsCollection.items.map((item) => (
+                                <SelectItem key={item.value} item={item} color={textColor}>
+                                  {item.label}
+                                </SelectItem>
+                              ))
                             )}
-                          </Box>
-                        )}
-                      </VStack>
+                          </SelectContent>
+                        </SelectRoot>
+                      )}
+                    />
+                    {errors.assignment_id && (
+                      <Text fontSize="sm" color="red.500" mt={1}>
+                        {errors.assignment_id.message?.toString()}
+                      </Text>
                     )}
-                  />
-                </Field>
-              </Fieldset.Content>
+                  </Field>
+                </Fieldset.Content>
+              )}
 
               {/* Preview Section */}
               <VStack align="stretch" gap={2}>

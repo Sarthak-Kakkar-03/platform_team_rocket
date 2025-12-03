@@ -29,6 +29,7 @@ export default function SurveyTakingPage() {
 
   const [survey, setSurvey] = useState<Survey | null>(null);
   const [existingResponse, setExistingResponse] = useState<SurveyResponse | null>(null);
+  const [targetProfileName, setTargetProfileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [, setIsSubmitting] = useState(false);
 
@@ -88,6 +89,42 @@ export default function SurveyTakingPage() {
         // Get existing response if any
         const response = await getResponse(surveyData.id, private_profile_id);
         setExistingResponse(response || null);
+
+        // If this is a peer survey, fetch the target profile name
+        if (surveyData.survey_type === "peer_review") {
+          if (response) {
+            // Get peer_survey entry for this response to find the target
+            const { data: peerSurveyData, error: peerSurveyError } = await supabase
+              .from("peer_surveys")
+              .select("target_private_profile_id")
+              .eq("survey_response_id", response.id)
+              .single();
+
+            if (!peerSurveyError && peerSurveyData?.target_private_profile_id) {
+              // Get the target profile name (profiles has class_id, so filter by both id and class_id for RLS)
+              const { data: targetProfile, error: targetProfileError } = await supabase
+                .from("profiles")
+                .select("name")
+                .eq("id", peerSurveyData.target_private_profile_id)
+                .eq("class_id", Number(course_id))
+                .single();
+
+              if (!targetProfileError && targetProfile?.name) {
+                setTargetProfileName(targetProfile.name);
+              } else {
+                // Set placeholder if name cannot be loaded
+                console.error("Error loading target profile:", targetProfileError);
+                setTargetProfileName("Name error");
+              }
+            } else {
+              // Set placeholder if peer survey data cannot be loaded
+              setTargetProfileName("Name error");
+            }
+          } else {
+            // Set placeholder if response doesn't exist yet
+            setTargetProfileName("Name error");
+          }
+        }
       } catch (error) {
         console.error("Error loading survey:", error);
         toaster.create({
@@ -233,8 +270,10 @@ export default function SurveyTakingPage() {
             ← Back to Surveys
           </Button>
 
-          <Heading size="xl" color="fg" textAlign="left">
-            {survey.title}
+          <Heading size="xl" color={textColor} textAlign="left">
+            {survey.survey_type === "peer_review"
+              ? `${survey.title} - Reviewing ${targetProfileName || "Name error"}`
+              : survey.title}
           </Heading>
 
           {survey.description && (

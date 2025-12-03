@@ -17,7 +17,7 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
   // Fetch survey data to get title, status, version, JSON, due_date, and assignment mode (latest version)
   const { data: survey, error: surveyError } = await supabase
     .from("surveys")
-    .select("id, title, status, json, due_date, assigned_to_all")
+    .select("id, title, status, json, due_date, survey_type")
     .eq("survey_id", survey_id)
     .eq("class_id", Number(course_id))
     .limit(1)
@@ -87,28 +87,27 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
     );
   }
 
-  // Calculate the correct total students based on assignment mode
-  let assignedStudentCount = 0;
+  // Calculate totals from survey_responses table
+  // Total assigned = all survey_responses entries (is_submitted true or false)
+  // Submitted count = survey_responses where is_submitted = true
+  const { count: totalAssigned } = await supabase
+    .from("survey_responses")
+    .select("*", { count: "exact", head: true })
+    .eq("survey_id", survey.id)
+    .is("deleted_at", null);
 
-  if (survey.assigned_to_all) {
-    // Survey is assigned to all students - count all students in the course
-    const { count } = await supabase
-      .from("user_roles")
-      .select("*", { count: "exact", head: true })
-      .eq("class_id", Number(course_id))
-      .eq("role", "student")
-      .eq("disabled", false);
+  const { count: submittedCount } = await supabase
+    .from("survey_responses")
+    .select("*", { count: "exact", head: true })
+    .eq("survey_id", survey.id)
+    .eq("is_submitted", true)
+    .is("deleted_at", null);
 
-    assignedStudentCount = count || 0;
-  } else {
-    // Survey is assigned to specific students - count assignments
-    const { count } = await supabase
-      .from("survey_assignments")
-      .select("*", { count: "exact", head: true })
-      .eq("survey_id", survey.id);
+  const assignedStudentCount = totalAssigned || 0;
+  const respondedCount = submittedCount || 0;
 
-    assignedStudentCount = count || 0;
-  }
+  // Filter to only show submitted responses in the view
+  const submittedResponses = (responses || []).filter((r) => r.is_submitted);
 
   // Pass data to the client component
   return (
@@ -120,8 +119,9 @@ export default async function SurveyResponsesPage({ params }: SurveyResponsesPag
       surveyStatus={survey.status}
       surveyJson={survey.json}
       surveyDueDate={survey.due_date}
-      responses={responses || []}
+      responses={submittedResponses}
       totalStudents={assignedStudentCount}
+      respondedCount={respondedCount}
       timezone={timezone}
     />
   );

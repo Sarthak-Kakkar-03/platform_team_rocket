@@ -229,9 +229,19 @@ export default async function StudentDashboard({
                     colorScheme = "gray";
                   }
                 } else {
-                  statusLabel = "In progress";
-                  buttonLabel = "Continue";
-                  colorScheme = "yellow";
+                  const responseJson = response.response as Record<string, unknown> | null | undefined;
+                  const isEmpty =
+                    !responseJson || (typeof responseJson === "object" && Object.keys(responseJson).length === 0);
+
+                  if (isEmpty) {
+                    statusLabel = "Not started";
+                    buttonLabel = "Start";
+                    colorScheme = "blue";
+                  } else {
+                    statusLabel = "In progress";
+                    buttonLabel = "Continue";
+                    colorScheme = "yellow";
+                  }
                 }
               }
 
