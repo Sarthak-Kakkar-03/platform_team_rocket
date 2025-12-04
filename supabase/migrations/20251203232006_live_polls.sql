@@ -116,7 +116,7 @@ CREATE OR REPLACE FUNCTION public.broadcast_live_poll_change()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path TO ''
 AS $$
 DECLARE
     target_class_id bigint;
@@ -134,9 +134,9 @@ BEGIN
     END IF;
 
     IF target_class_id IS NOT NULL THEN
-        -- Create payload
+        -- Create payload for staff channel (staff_data_change type)
         staff_payload := jsonb_build_object(
-            'type', 'table_change',
+            'type', 'staff_data_change',
             'operation', TG_OP,
             'table', TG_TABLE_NAME,
             'row_id', CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END,
@@ -146,7 +146,7 @@ BEGIN
         );
 
         -- Broadcast to staff channel
-        PERFORM realtime.send(
+        PERFORM public.safe_broadcast(
             staff_payload,
             'broadcast',
             'class:' || target_class_id || ':staff',
@@ -154,14 +154,15 @@ BEGIN
         );
 
         -- Broadcast to all students in the class (for live poll visibility)
+        -- Using individual user channels to respect RLS policies
         SELECT ARRAY(
             SELECT ur.private_profile_id
-            FROM user_roles ur
+            FROM public.user_roles ur
             WHERE ur.class_id = target_class_id AND ur.role = 'student'
         ) INTO affected_profile_ids;
 
         FOREACH profile_id IN ARRAY affected_profile_ids LOOP
-            PERFORM realtime.send(
+            PERFORM public.safe_broadcast(
                 staff_payload,
                 'broadcast',
                 'class:' || target_class_id || ':user:' || profile_id,
@@ -170,6 +171,7 @@ BEGIN
         END LOOP;
     END IF;
 
+    -- Return the appropriate record
     IF TG_OP = 'DELETE' THEN
         RETURN OLD;
     ELSE
@@ -192,7 +194,7 @@ CREATE OR REPLACE FUNCTION public.broadcast_live_poll_response_change()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path TO ''
 AS $$
 DECLARE
     target_class_id bigint;
@@ -210,13 +212,13 @@ BEGIN
 
     -- Get class_id from the parent poll
     SELECT class_id INTO target_class_id
-    FROM live_polls
+    FROM public.live_polls
     WHERE id = target_poll_id;
 
     IF target_class_id IS NOT NULL THEN
-        -- Create payload
+        -- Create payload for staff channel (staff_data_change type)
         staff_payload := jsonb_build_object(
-            'type', 'table_change',
+            'type', 'staff_data_change',
             'operation', TG_OP,
             'table', TG_TABLE_NAME,
             'row_id', CASE WHEN TG_OP = 'DELETE' THEN OLD.id ELSE NEW.id END,
@@ -227,7 +229,7 @@ BEGIN
         );
 
         -- Only broadcast to staff channel (students don't need response updates)
-        PERFORM realtime.send(
+        PERFORM public.safe_broadcast(
             staff_payload,
             'broadcast',
             'class:' || target_class_id || ':staff',
@@ -235,6 +237,7 @@ BEGIN
         );
     END IF;
 
+    -- Return the appropriate record
     IF TG_OP = 'DELETE' THEN
         RETURN OLD;
     ELSE
