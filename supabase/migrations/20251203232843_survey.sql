@@ -74,8 +74,8 @@ CREATE TABLE survey_responses (
 
 -- Create peer_surveys table
 CREATE TABLE peer_surveys (
-    target_private_profile_id UUID NOT NULL REFERENCES user_roles(private_profile_id),
-    survey_response_id UUID NOT NULL REFERENCES survey_responses(id)
+    target_private_profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    survey_response_id UUID NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE
 );
 
 -- Create indexes
@@ -161,6 +161,25 @@ AS $$
   FROM public.survey_responses sr
   JOIN public.surveys s ON s.id = sr.survey_id
   WHERE sr.id = p_survey_response_id;
+$$;
+
+-- Helper function to check if user has a survey_response for a survey (bypasses RLS to avoid recursion)
+CREATE OR REPLACE FUNCTION user_has_survey_response(p_survey_id UUID, p_user_id UUID, p_class_id BIGINT)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1 
+    FROM public.survey_responses sr
+    JOIN public.user_roles ur ON ur.private_profile_id = sr.profile_id
+    WHERE sr.survey_id = p_survey_id
+      AND ur.user_id = p_user_id
+      AND ur.class_id = p_class_id
+      AND ur.disabled = false
+  );
 $$;
 
 -- Function to check if user is staff (instructor/grader) in ANY class
@@ -286,17 +305,11 @@ CREATE POLICY surveys_all_staff ON surveys
   WITH CHECK (authorizeforclassgrader(surveys.class_id));
 
 -- Students can only select surveys if they have a corresponding survey_response
+-- Uses SECURITY DEFINER function to avoid infinite recursion with survey_responses RLS
 CREATE POLICY surveys_select_students ON surveys
   FOR SELECT
   USING (
-    EXISTS (
-      SELECT 1 FROM public.survey_responses sr
-      JOIN public.user_roles ur ON ur.private_profile_id = sr.profile_id
-      WHERE sr.survey_id = surveys.id
-        AND ur.user_id = auth.uid()
-        AND ur.class_id = surveys.class_id
-        AND ur.disabled = false
-    )
+    public.user_has_survey_response(surveys.id, auth.uid(), surveys.class_id)
   );
 
 -- SURVEY_TEMPLATES TABLE POLICIES
