@@ -38,6 +38,7 @@ import {
   DialogCloseTrigger
 } from "@/components/ui/dialog";
 import StudentGroupPicker from "@/components/ui/student-group-picker";
+import { useColorModeValue } from "@/components/ui/color-mode";
 
 // New modal wrapper around SurveyBuilder
 import SurveyBuilderModal from "@/components/survey/SurveyBuilderModal";
@@ -125,6 +126,15 @@ export default function SurveyForm({
   const currentStatus = watch("status");
   const assignedStudents = watch("assigned_students") || [];
   const surveyType = watch("survey_type");
+
+  // Color mode values
+  const textColor = useColorModeValue("#000000", "#FFFFFF");
+  const bgColor = useColorModeValue("#F2F2F2", "#0D0D0D");
+  const borderColor = useColorModeValue("#D2D2D2", "#2D2D2D");
+  const placeholderColor = useColorModeValue("#8A8A8A", "#757575");
+  const buttonTextColor = useColorModeValue("#4B5563", "#A0AEC0");
+  const buttonBorderColor = useColorModeValue("#6B7280", "#4A5568");
+  const cardBgColor = useColorModeValue("#E5E5E5", "#1A1A1A");
 
   // Create collection for survey type dropdown
   const surveyTypeCollection = createListCollection({

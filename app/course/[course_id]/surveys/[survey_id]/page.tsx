@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Heading, Text, VStack, Button } from "@chakra-ui/react";
+import { useColorModeValue } from "@/components/ui/color-mode";
 import { createClient } from "@/utils/supabase/client";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
@@ -32,6 +33,11 @@ export default function SurveyTakingPage() {
   const [targetProfileName, setTargetProfileName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [, setIsSubmitting] = useState(false);
+
+  // Color mode values
+  const textColor = useColorModeValue("#000000", "#FFFFFF");
+  const borderColor = useColorModeValue("#D2D2D2", "#2D2D2D");
+  const cardBgColor = useColorModeValue("#E5E5E5", "#1A1A1A");
 
   useEffect(() => {
     const loadSurveyData = async () => {
@@ -206,7 +212,7 @@ export default function SurveyTakingPage() {
     return (
       <Box py={8} maxW="1200px" my={2} mx="auto">
         <Box display="flex" alignItems="center" justifyContent="center" p={8}>
-          <Text>Loading survey...</Text>
+          <Text color={textColor}>Loading survey...</Text>
         </Box>
       </Box>
     );
@@ -216,12 +222,12 @@ export default function SurveyTakingPage() {
     return (
       <Box py={8} maxW="1200px" my={2} mx="auto">
         <VStack align="center" gap={6} w="100%" minH="100vh" p={8}>
-          <Box w="100%" maxW="800px" bg="bg.muted" border="1px solid" borderColor="border" borderRadius="lg" p={8}>
+          <Box w="100%" maxW="800px" bg={cardBgColor} border="1px solid" borderColor={borderColor} borderRadius="lg" p={8}>
             <VStack align="center" gap={4}>
-              <Heading size="xl" color="fg" textAlign="center">
+              <Heading size="xl" color={textColor} textAlign="center">
                 Survey Not Found
               </Heading>
-              <Text color="fg" textAlign="center">
+              <Text color={textColor} textAlign="center">
                 This survey is not available or has been removed.
               </Text>
               <Button
@@ -269,7 +275,7 @@ export default function SurveyTakingPage() {
           </Heading>
 
           {survey.description && (
-            <Text color="fg" fontSize="md" opacity={0.8}>
+            <Text color={textColor} fontSize="md" opacity={0.8}>
               {survey.description}
             </Text>
           )}
@@ -306,7 +312,7 @@ export default function SurveyTakingPage() {
         </VStack>
 
         {/* Survey */}
-        <Box w="100%" bg="bg.muted" border="1px solid" borderColor="border" borderRadius="lg" p={8}>
+        <Box w="100%" bg={cardBgColor} border="1px solid" borderColor={borderColor} borderRadius="lg" p={8}>
           <SurveyComponent
             surveyJson={survey.json}
             initialData={existingResponse?.response}
