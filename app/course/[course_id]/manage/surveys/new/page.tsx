@@ -665,7 +665,7 @@ export default function NewSurveyPage() {
         throw err;
       }
     },
-    [saveSurvey, convertDueDateToISO]
+    [saveSurvey, convertDueDateToISO, router, course_id]
   );
 
   return (
