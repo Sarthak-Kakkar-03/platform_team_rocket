@@ -222,7 +222,15 @@ export default function SurveyTakingPage() {
     return (
       <Box py={8} maxW="1200px" my={2} mx="auto">
         <VStack align="center" gap={6} w="100%" minH="100vh" p={8}>
-          <Box w="100%" maxW="800px" bg={cardBgColor} border="1px solid" borderColor={borderColor} borderRadius="lg" p={8}>
+          <Box
+            w="100%"
+            maxW="800px"
+            bg={cardBgColor}
+            border="1px solid"
+            borderColor={borderColor}
+            borderRadius="lg"
+            p={8}
+          >
             <VStack align="center" gap={4}>
               <Heading size="xl" color={textColor} textAlign="center">
                 Survey Not Found
