@@ -1,6 +1,8 @@
 name: Standalone E2E Tests
+
 on:
   workflow_dispatch:
+
 jobs:
   test:
     timeout-minutes: 60
@@ -8,13 +10,17 @@ jobs:
     outputs:
       service_uuid: ${{ steps.deploy.outputs.service_uuid }}
       app_uuid: ${{ steps.deploy.outputs.app_uuid }}
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
+
       - name: Install dependencies
         run: npm ci
+
       - name: Deploy an E2E testing environment
         id: deploy
         uses: pawtograder/coolify-supabase-deployment-action@main
@@ -28,8 +34,10 @@ jobs:
           coolify_environment_uuid: ${{ secrets.COOLIFY_ENVIRONMENT_UUID }}
           coolify_supabase_api_url: ${{ secrets.COOLIFY_SUPABASE_API_URL }}
           deployment_app_uuid: ${{ secrets.COOLIFY_DEPLOYMENT_APP_UUID }}
+
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps
+
       - name: Run Playwright tests
         env:
           SUPABASE_URL: ${{ steps.deploy.outputs.supabase_url }}
@@ -37,13 +45,18 @@ jobs:
           SUPABASE_ANON_KEY: ${{ steps.deploy.outputs.supabase_anon_key }}
           BASE_URL: ${{ steps.deploy.outputs.app_url }}
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}
-        run: npx percy exec -- playwright test
+        run: |
+          npx percy exec -- playwright test \
+            tests/e2e/survey/surveys.test.tsx \
+            tests/e2e/survey/polls.test.tsx
+
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 30
+
   teardown:
     needs: test
     runs-on: ubuntu-latest
@@ -62,3 +75,4 @@ jobs:
           deployment_app_uuid: ${{ secrets.COOLIFY_DEPLOYMENT_APP_UUID }}
           cleanup_service_uuid: ${{ needs.test.outputs.service_uuid }}
           cleanup_app_uuid: ${{ needs.test.outputs.app_uuid }}
+
