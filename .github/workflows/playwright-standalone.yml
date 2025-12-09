@@ -75,4 +75,3 @@ jobs:
           deployment_app_uuid: ${{ secrets.COOLIFY_DEPLOYMENT_APP_UUID }}
           cleanup_service_uuid: ${{ needs.test.outputs.service_uuid }}
           cleanup_app_uuid: ${{ needs.test.outputs.app_uuid }}
-
