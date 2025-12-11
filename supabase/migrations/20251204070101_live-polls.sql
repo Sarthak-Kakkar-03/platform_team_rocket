@@ -296,7 +296,6 @@ CREATE POLICY live_polls_responses_all_staff ON live_poll_responses
     )
   );
 
--- can_access_poll_response function handles anonymous users (auth.uid() IS NULL)
 CREATE OR REPLACE FUNCTION can_access_poll_response(poll_id uuid, profile_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -304,16 +303,38 @@ SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
-  SELECT CASE
-    -- Early exit: if require_login is false, anyone can access (no user_roles query needed)
-    WHEN NOT lp.require_login THEN true
-    -- If require_login is true, user must be authenticated
-    WHEN lp.require_login AND auth.uid() IS NULL THEN false
-    -- If require_login is true and user is authenticated, check user role
-    WHEN lp.require_login AND auth.uid() IS NOT NULL THEN true
-  END
-  FROM public.live_polls lp
-  WHERE lp.id = poll_id;
+  WITH poll AS (
+    SELECT class_id, require_login
+    FROM public.live_polls
+    WHERE id = poll_id
+  ),
+  user_role AS (
+    SELECT 1
+    FROM poll p
+    JOIN public.user_roles ur
+      ON ur.class_id = p.class_id
+    WHERE ur.user_id = auth.uid()
+      AND (profile_id IS NULL OR ur.public_profile_id = profile_id OR ur.private_profile_id = profile_id)
+  )
+  SELECT COALESCE(
+    (
+      SELECT CASE
+        WHEN p.require_login = false THEN
+          CASE
+            WHEN profile_id IS NULL THEN true -- anonymous allowed when login not required
+            WHEN auth.uid() IS NULL THEN false -- cannot spoof profile without a session
+            ELSE EXISTS (SELECT 1 FROM user_role) -- profile must belong to authenticated user in class
+          END
+        ELSE
+          CASE
+            WHEN auth.uid() IS NULL THEN false -- login required
+            ELSE EXISTS (SELECT 1 FROM user_role) -- authenticated user must be in class and match profile if provided
+          END
+      END
+      FROM poll p
+    ),
+    false
+  );
 $$;
 
 -- Students can insert responses if:
