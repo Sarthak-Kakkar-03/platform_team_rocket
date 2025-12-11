@@ -12,9 +12,24 @@ type MultipleChoiceDynamicViewerProps = {
 
 export default function MultipleChoiceDynamicViewer({ pollId, pollQuestion }: MultipleChoiceDynamicViewerProps) {
   // Extract question title for display
-  const questionData = pollQuestion as unknown as Record<string, unknown> | null;
-  const firstElement = (questionData?.elements as unknown as Array<{ title: string }>)?.[0];
-  const questionPrompt = firstElement?.title || "Poll";
+  let questionPrompt = "Poll";
+  
+  // Type guard to safely access pollQuestion properties
+  if (typeof pollQuestion === "object" && pollQuestion !== null && !Array.isArray(pollQuestion)) {
+    const questionData = pollQuestion as Record<string, Json>;
+    const elements = questionData.elements;
+    
+    if (Array.isArray(elements) && elements.length > 0) {
+      const firstElement = elements[0];
+      if (typeof firstElement === "object" && firstElement !== null && !Array.isArray(firstElement)) {
+        const elementData = firstElement as Record<string, Json>;
+        const title = elementData.title;
+        if (typeof title === "string") {
+          questionPrompt = title;
+        }
+      }
+    }
+  }
 
   // Get counts directly from hook - all logic is handled internally
   const { counts: choiceCounts } = usePollResponseCounts(pollId, pollQuestion);

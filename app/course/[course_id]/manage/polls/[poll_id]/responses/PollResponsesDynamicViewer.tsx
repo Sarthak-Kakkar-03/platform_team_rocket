@@ -28,12 +28,36 @@ interface FullscreenDocument extends Document {
 }
 
 function parseJsonForType(pollQuestion: Json): "radiogroup" | "checkbox" {
-  const questionData = pollQuestion as unknown as Record<string, unknown> | null;
-  const type = (questionData?.elements as unknown as { type: string }[])?.[0]?.type;
-  if (!type) {
+  // Type guard to check if Json is an object
+  if (typeof pollQuestion !== "object" || pollQuestion === null || Array.isArray(pollQuestion)) {
+    throw new Error("Poll question must be a JSON object");
+  }
+  
+  const questionData = pollQuestion as Record<string, Json>;
+  const elements = questionData.elements;
+  
+  // Type guard to check if elements is an array
+  if (!Array.isArray(elements) || elements.length === 0) {
+    throw new Error("Poll question JSON must have an 'elements' array with at least one element");
+  }
+  
+  const firstElement = elements[0];
+  if (typeof firstElement !== "object" || firstElement === null || Array.isArray(firstElement)) {
+    throw new Error("Poll question elements[0] must be a JSON object");
+  }
+  
+  const elementData = firstElement as Record<string, Json>;
+  const type = elementData.type;
+  
+  if (typeof type !== "string") {
     throw new Error("Poll question JSON must have a 'type' field in elements[0]");
   }
-  return type as "radiogroup" | "checkbox";
+  
+  if (type !== "radiogroup" && type !== "checkbox") {
+    throw new Error(`Unsupported poll question type: ${type}`);
+  }
+  
+  return type;
 }
 
 type PollResponsesDynamicViewerProps = {
