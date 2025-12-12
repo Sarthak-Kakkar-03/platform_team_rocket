@@ -58,6 +58,7 @@ export default function PollResponsesDynamicViewer({
 }: PollResponsesDynamicViewerProps) {
   const [isPresenting, setIsPresenting] = useState(false);
   const fullscreenRef = useRef<HTMLDivElement>(null);
+  const isTogglingRef = useRef(false);
 
   // Use real-time hook for poll data
   const poll = useLivePoll(pollId);
@@ -105,9 +106,15 @@ export default function PollResponsesDynamicViewer({
   const { qrCodeUrl } = usePollQrCode(courseId, pollUrl, qrLightColor, qrDarkColor);
 
   const handleToggleLive = useCallback(async () => {
+    // In-flight guard: return early if a toggle is already in progress
+    if (isTogglingRef.current) {
+      return;
+    }
+
     const originalState = pollIsLive;
     const nextState = !pollIsLive;
     setPollIsLive(nextState);
+    isTogglingRef.current = true;
     const supabase = createClient();
     const loadingToast = toaster.create({
       title: nextState ? "Starting Poll" : "Closing Poll",
@@ -116,10 +123,19 @@ export default function PollResponsesDynamicViewer({
     });
 
     try {
-      const { error } = await supabase.from("live_polls").update({ is_live: nextState }).eq("id", pollId);
+      const result = await supabase
+        .from("live_polls")
+        .update({ is_live: nextState }, { count: "exact" })
+        .eq("id", pollId)
+        .throwOnError();
 
-      if (error) {
-        throw new Error(error.message);
+      // Validate that exactly one row was updated to catch RLS/stale-filter silent failures
+      if (result.count !== 1) {
+        throw new Error(
+          result.count === 0
+            ? "No poll was updated. The poll may have been deleted or you may not have permission to update it."
+            : `Expected 1 row to be updated, but ${result.count} rows were updated.`
+        );
       }
 
       toaster.dismiss(loadingToast);
@@ -129,13 +145,18 @@ export default function PollResponsesDynamicViewer({
         type: "success"
       });
     } catch (err) {
+      // Only rollback if the operation actually failed (and not prevented by the in-flight guard)
+      setPollIsLive(originalState);
       toaster.dismiss(loadingToast);
       toaster.create({
         title: "Unable to update poll",
         description: err instanceof Error ? err.message : "An unexpected error occurred",
         type: "error"
       });
-      setPollIsLive(originalState);
+    } finally {
+      // Always dismiss the loading toast and reset the in-flight flag
+      toaster.dismiss(loadingToast);
+      isTogglingRef.current = false;
     }
   }, [pollId, pollIsLive]);
 
